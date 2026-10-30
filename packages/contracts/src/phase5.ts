@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { ROLES } from './permissions'
+import { type RecruitmentSettings, recruitmentSettingsInput } from './recruitment'
 import { uuid } from './schemas'
 
 const isoDate = z.iso.date()
@@ -167,10 +168,12 @@ export const tenantSettingsInput = z.object({
     .optional(),
   /** Perfis obrigados a usar verificação em duas etapas. */
   requireMfaFor: z.array(z.enum(ROLES)).default([]),
+  /** Retenção e mensagens do recrutamento (padrões em RECRUITMENT_DEFAULTS). */
+  recruitment: recruitmentSettingsInput.optional(),
 })
 export type TenantSettingsInput = z.infer<typeof tenantSettingsInput>
 
-export type TenantSettings = { requireMfaFor?: (typeof ROLES)[number][] }
+export type TenantSettings = { requireMfaFor?: (typeof ROLES)[number][]; recruitment?: RecruitmentSettings }
 
 // ---------- importação ----------
 
