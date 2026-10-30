@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Tipos, testes e build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    name: Ponta a ponta (PostgreSQL 17 real)
+    runs-on: ubuntu-latest
+    needs: verify
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: falcao_rh
+          POSTGRES_PASSWORD: ci-somente-teste
+          POSTGRES_DB: falcao_rh
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U falcao_rh"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: development
+      DATABASE_URL: postgres://falcao_rh:ci-somente-teste@127.0.0.1:5432/falcao_rh
+      AUTH_SECRET: segredo-de-ci-apenas-para-testes-automatizados
+      WEB_ORIGIN: http://localhost:5173
+      API_URL: http://localhost:5173
+      STORAGE_DIR: ${{ runner.temp }}/storage
+      SEED_ADMIN_EMAIL: admin@demo.falcao.invalid
+      SEED_ADMIN_PASSWORD: senha-de-ci-demo-2026
+      E2E_PASSWORD: senha-de-ci-demo-2026
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Migrações e dados de demonstração (fictícios)
+        run: npm run db:migrate && npm run db:seed
+      - name: Subir API e interface
+        run: |
+          npm run dev:api > api.log 2>&1 &
+          npm run dev:web > web.log 2>&1 &
+          npx --yes wait-on@8 -t 90000 http://127.0.0.1:3333/health http://localhost:5173
+      - run: npx playwright test
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-falhas
+          path: |
+            test-results
+            api.log
+            web.log
+          retention-days: 7
