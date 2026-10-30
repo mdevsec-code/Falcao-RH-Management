@@ -1,13 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { AnimatePresence, motion } from 'motion/react'
-import { useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Eye, EyeOff, Lock, Mail, Moon, ShieldCheck, Sun } from 'lucide-react'
+import { useRef, useState, type FormEvent, type InputHTMLAttributes, type ReactNode } from 'react'
 
 import falcon from '../assets/falcao-mark.svg'
 import { Magnetic } from '../components/motion'
 import { Button } from '../components/ui/button'
 import { Field, Input } from '../components/ui/field'
 import { authClient } from '../lib/auth-client'
+import { cn } from '../lib/cn'
+import { toggleTheme, useTheme } from '../lib/theme'
 import { canHover, gsap, reducedMotion, SplitText, useGSAP } from '../lib/gsap'
 
 type Step = 'password' | 'totp' | 'forgot' | 'forgot-sent'
@@ -68,7 +71,7 @@ function BrandPanel() {
     <aside
       ref={root}
       style={{ ['--spot-x' as string]: '70%', ['--spot-y' as string]: '40%' }}
-      className="relative hidden overflow-hidden bg-ink lg:flex lg:flex-col lg:justify-between lg:p-14"
+      className="grain relative hidden overflow-hidden bg-night lg:flex lg:flex-col lg:justify-between lg:p-14"
     >
       {/* Grade técnica revelada pelo holofote. */}
       <div className="blueprint pointer-events-none absolute inset-0 opacity-40" aria-hidden />
@@ -81,30 +84,68 @@ function BrandPanel() {
       <div data-falcon className="pointer-events-none absolute -right-[22%] -bottom-[4%] h-[104%] will-change-transform">
         <img src={falcon} alt="" className="h-full w-auto max-w-none select-none" draggable={false} />
       </div>
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-[58%] bg-gradient-to-r from-ink from-60% to-transparent" aria-hidden />
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-[58%] bg-gradient-to-r from-night from-60% to-transparent" aria-hidden />
 
       <div data-brand className="relative">
-        <p className="font-display text-[28px] leading-none font-semibold text-paper">
+        <p className="font-display text-[28px] leading-none font-semibold text-snow">
           Falcão <span className="text-brand">RH</span>
         </p>
-        <p className="mt-1.5 text-[13px] text-steel-soft">Falcão Construções e Engenharia</p>
+        <p className="mt-2 text-[11px] font-medium tracking-[0.18em] text-fog/80 uppercase">Falcão Construções e Engenharia</p>
       </div>
 
       <div className="relative max-w-[30rem]">
-        <h2 data-headline className="font-display text-[clamp(52px,5.4vw,84px)] leading-[0.92] font-semibold tracking-[-0.01em] text-paper">
+        <h2 data-headline className="font-display text-[clamp(52px,5.4vw,84px)] leading-[0.92] font-semibold tracking-[-0.015em] text-snow">
           Gente, obra e escritório no mesmo cadastro.
         </h2>
         <ul className="mt-10 grid gap-3">
           {CAPABILITIES.map(text => (
-            <li data-capability key={text} className="flex items-center gap-4 text-[15px] text-paper/85">
-              <span className="size-1.5 shrink-0 bg-brand" aria-hidden />
+            <li data-capability key={text} className="flex items-center gap-4 text-[15px] text-snow/85">
+              <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-brand/40 bg-brand/10" aria-hidden>
+                <span className="size-1.5 rounded-full bg-brand" />
+              </span>
               {text}
             </li>
           ))}
         </ul>
-        <div data-rule className="mt-10 h-px w-full bg-paper/25" aria-hidden />
+        <div data-rule className="mt-10 h-px w-full bg-gradient-to-r from-brand/70 via-snow/25 to-transparent" aria-hidden />
       </div>
     </aside>
+  )
+}
+
+function AuthThemeToggle() {
+  const theme = useTheme()
+  return (
+    <button
+      type="button"
+      onClick={event => toggleTheme({ x: event.clientX, y: event.clientY })}
+      className="absolute top-5 right-5 z-10 flex size-10 items-center justify-center rounded-full border border-line bg-paper/80 text-ink-soft shadow-xs backdrop-blur transition-colors hover:text-ink"
+      aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
+    >
+      {theme === 'dark' ? <Sun className="size-[18px]" aria-hidden /> : <Moon className="size-[18px]" aria-hidden />}
+    </button>
+  )
+}
+
+/** Campo com ícone à esquerda e, para senha, o botão de mostrar/ocultar. */
+function IconInput({ icon: Icon, type, ...props }: InputHTMLAttributes<HTMLInputElement> & { icon: typeof Mail }) {
+  const [visible, setVisible] = useState(false)
+  const secret = type === 'password'
+  return (
+    <span className="relative block">
+      <Icon className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-steel" aria-hidden />
+      <Input {...props} type={secret && visible ? 'text' : type} className={cn('h-12 pl-10', secret && 'pr-11')} />
+      {secret && (
+        <button
+          type="button"
+          onClick={() => setVisible(v => !v)}
+          className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-steel transition-colors hover:bg-ink/5 hover:text-ink"
+          aria-label={visible ? 'Ocultar senha' : 'Mostrar senha'}
+        >
+          {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+        </button>
+      )}
+    </span>
   )
 }
 
@@ -120,15 +161,20 @@ export function AuthFrame({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-dvh lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
       <BrandPanel />
-      <main className="relative flex items-center justify-center bg-concrete px-5 py-12">
-        <div ref={panel} className="w-full max-w-sm">
-          <div className="mb-12 flex items-center gap-3 lg:hidden">
+      <main className="relative flex flex-col items-center justify-center overflow-hidden bg-concrete px-5 py-12">
+        <div className="canvas-grid pointer-events-none absolute inset-0" aria-hidden />
+        <AuthThemeToggle />
+        <div ref={panel} className="relative w-full max-w-[400px]">
+          <div className="mb-10 flex items-center gap-3 lg:hidden">
             <img src={falcon} alt="" className="h-12 w-auto" />
             <span className="font-display text-[30px] leading-none font-semibold text-ink">
-              Falcão <span className="bg-brand px-1">RH</span>
+              Falcão <span className="rounded-[5px] bg-brand px-1.5 text-night">RH</span>
             </span>
           </div>
-          {children}
+          <div className="rounded-xl border border-line bg-paper/85 p-7 shadow-lift backdrop-blur-xl sm:p-9">{children}</div>
+          <p className="mt-6 flex items-center justify-center gap-2 text-[12px] text-steel">
+            <ShieldCheck className="size-3.5 text-ok" aria-hidden /> Conexão segura · Dados protegidos pela LGPD
+          </p>
         </div>
       </main>
     </div>
@@ -153,8 +199,9 @@ function StepPanel({ id, children }: { id: string; children: ReactNode }) {
 function StepTitle({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="mb-6">
-      <h1 className="font-display text-[48px] leading-[0.95] font-semibold text-ink">{title}</h1>
-      {children && <p className="mt-2.5 text-steel">{children}</p>}
+      <span className="mb-4 block h-[3px] w-10 rounded-full bg-brand" aria-hidden />
+      <h1 className="font-display text-[44px] leading-[0.95] font-semibold tracking-[-0.01em] text-ink">{title}</h1>
+      {children && <p className="mt-2.5 text-[14.5px] text-steel">{children}</p>}
     </div>
   )
 }
@@ -258,14 +305,14 @@ export function LoginPage() {
             <form onSubmit={signIn} className="flex flex-col gap-4" noValidate>
               <StepTitle title="Entrar">Use o e-mail do convite que você recebeu.</StepTitle>
               <Field label="E-mail">
-                {props => <Input {...props} type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />}
+                {props => <IconInput {...props} icon={Mail} type="email" autoComplete="username" placeholder="voce@empresa.com.br" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />}
               </Field>
               <Field label="Senha">
-                {props => <Input {...props} type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required />}
+                {props => <IconInput {...props} icon={Lock} type="password" autoComplete="current-password" placeholder="Sua senha" value={password} onChange={e => setPassword(e.target.value)} required />}
               </Field>
               <FormError error={error} attempt={attempt} />
               <Magnetic strength={0.12} className="flex w-full">
-                <Button type="submit" variant="primary" loading={busy} disabled={!email || !password} className="mt-1 h-12 w-full text-base">
+                <Button type="submit" variant="primary" loading={busy} disabled={!email || !password} size="lg" className="mt-1 w-full">
                   Entrar
                 </Button>
               </Magnetic>
@@ -286,7 +333,7 @@ export function LoginPage() {
                 )}
               </Field>
               <FormError error={error} attempt={attempt} />
-              <Button type="submit" variant="primary" loading={busy} disabled={code.length !== 6} className="h-11">
+              <Button type="submit" variant="primary" size="lg" loading={busy} disabled={code.length !== 6}>
                 Verificar
               </Button>
             </form>
@@ -298,9 +345,9 @@ export function LoginPage() {
             <form onSubmit={forgot} className="flex flex-col gap-4">
               <StepTitle title="Redefinir senha">Enviaremos um link para você criar uma nova senha.</StepTitle>
               <Field label="E-mail">
-                {props => <Input {...props} type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />}
+                {props => <IconInput {...props} icon={Mail} type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />}
               </Field>
-              <Button type="submit" variant="primary" loading={busy} disabled={!email} className="h-11">
+              <Button type="submit" variant="primary" size="lg" loading={busy} disabled={!email}>
                 Enviar link
               </Button>
               <button type="button" onClick={() => go('password')} className="self-start text-sm text-steel underline underline-offset-2 hover:text-ink">

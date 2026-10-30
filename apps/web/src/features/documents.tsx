@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Download, FileText, FileUp, Lock } from 'lucide-react'
+import { Archive, Download, FileImage, FileSpreadsheet, FileText, FileUp, Lock, ShieldAlert } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
@@ -46,15 +46,19 @@ export function DocumentTable({
   onOpen,
   showEmployee = true,
   empty = 'Nenhum documento',
+  bare,
 }: {
   rows: DocumentItem[]
   loading?: boolean
   onOpen?: (id: string) => void
   showEmployee?: boolean
   empty?: string
+  /** Dentro de um painel: sem moldura própria. */
+  bare?: boolean
 }) {
   return (
     <DataTable
+      bare={bare}
       loading={loading}
       rows={rows}
       onRowClick={onOpen ? r => onOpen(r.id) : undefined}
@@ -65,13 +69,11 @@ export function DocumentTable({
         {
           label: 'Documento',
           render: d => (
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-sm bg-concrete text-steel">
-                <FileText className="size-4" aria-hidden />
-              </span>
+            <div className="flex items-center gap-3">
+              <FileIcon mime={d.mimeType} />
               <div className="min-w-0">
                 <div className="truncate font-medium text-ink">{d.title}</div>
-                <div className="truncate text-[13px] text-steel">
+                <div className="truncate text-[12.5px] text-steel">
                   {d.filename}, {formatBytes(d.sizeBytes)}
                   {d.currentVersion > 1 && `, versão ${d.currentVersion}`}
                 </div>
@@ -97,6 +99,22 @@ export function DocumentTable({
         </Button>
       )}
     />
+  )
+}
+
+/** Ícone pelo tipo do arquivo, com cor discreta por família. */
+function FileIcon({ mime }: { mime: string }) {
+  const [Icon, tone] = mime.startsWith('image/')
+    ? [FileImage, 'bg-info-soft text-info ring-info/15']
+    : /sheet|excel/.test(mime)
+      ? [FileSpreadsheet, 'bg-ok-soft text-ok ring-ok/15']
+      : mime === 'application/pdf'
+        ? [FileText, 'bg-danger-soft text-danger ring-danger/15']
+        : [FileText, 'bg-sunken text-steel ring-line']
+  return (
+    <span className={`flex size-9 shrink-0 items-center justify-center rounded-sm ring-1 ${tone}`}>
+      <Icon className="size-4" aria-hidden />
+    </span>
   )
 }
 
@@ -155,8 +173,8 @@ export function DocumentDrawer({ id, onClose }: { id: string | null; onClose: ()
       {doc && (
         <div className="flex flex-col gap-6">
           {doc.sensitive && (
-            <p className="flex items-center gap-2 rounded-sm bg-concrete px-3 py-2 text-[13px] text-ink-soft">
-              <Lock className="size-4" aria-hidden /> Documento sensível: só o RH e o titular têm acesso. Cada download fica registrado.
+            <p className="flex items-center gap-2.5 rounded-md border border-danger/20 bg-danger-soft px-3.5 py-3 text-[13px] text-ink-soft">
+              <ShieldAlert className="size-4 shrink-0 text-danger" aria-hidden /> Documento sensível: só o RH e o titular têm acesso. Cada download fica registrado.
             </p>
           )}
 
@@ -178,11 +196,11 @@ export function DocumentDrawer({ id, onClose }: { id: string | null; onClose: ()
           )}
 
           <section>
-            <h3 className="mb-3 font-medium text-ink">Versões</h3>
-            <ul className="divide-y divide-line rounded-sm border border-line">
+            <h3 className="eyebrow mb-3">Versões</h3>
+            <ul className="divide-y divide-line overflow-hidden rounded-md border border-line">
               {doc.versions.map(v => (
-                <li key={v.version} className="flex items-center gap-3 px-4 py-3 text-sm">
-                  <span className="num flex size-8 items-center justify-center rounded-sm bg-ink font-display text-[15px] font-semibold text-brand">
+                <li key={v.version} className="flex items-center gap-3 px-4 py-3 text-sm transition-colors first:bg-brand-soft/50 hover:bg-sunken">
+                  <span className="num flex size-9 items-center justify-center rounded-sm bg-night font-display text-[15px] font-semibold text-brand">
                     v{v.version}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -201,7 +219,7 @@ export function DocumentDrawer({ id, onClose }: { id: string | null; onClose: ()
 
           {canManage && (
             <section className="flex flex-col gap-3">
-              <h3 className="font-medium text-ink">Enviar nova versão</h3>
+              <h3 className="eyebrow">Enviar nova versão</h3>
               <FileInput file={file} onChange={setFile} />
               <Button className="self-start" disabled={!file} loading={newVersion.isPending} onClick={() => newVersion.mutate()}>
                 <FileUp className="size-4" aria-hidden /> Enviar versão {doc.currentVersion + 1}

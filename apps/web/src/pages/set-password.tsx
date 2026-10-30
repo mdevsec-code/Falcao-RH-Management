@@ -42,7 +42,7 @@ export function SetPasswordPage() {
       <AuthFrame>
         <h1 className="font-display text-[34px] leading-none font-semibold text-ink">Senha definida</h1>
         <p className="mt-3 text-steel">Agora entre com seu e-mail e a nova senha.</p>
-        <Link to="/entrar" className="mt-6 inline-flex h-10 items-center rounded-sm border border-brand-strong bg-brand px-4 font-semibold text-ink">
+        <Link to="/entrar" className="mt-6 inline-flex h-11 items-center rounded-sm border border-brand-strong/70 bg-brand px-5 font-semibold text-night shadow-brand">
           Entrar
         </Link>
       </AuthFrame>
@@ -62,7 +62,7 @@ export function SetPasswordPage() {
           {props => <Input {...props} type="password" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} />}
         </Field>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        <Button type="submit" variant="primary" loading={busy} disabled={password.length < 10 || password !== confirm}>
+        <Button type="submit" variant="primary" size="lg" loading={busy} disabled={password.length < 10 || password !== confirm}>
           Salvar senha
         </Button>
       </form>

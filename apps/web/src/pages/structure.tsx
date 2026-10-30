@@ -1,14 +1,16 @@
-import * as Tabs from '@radix-ui/react-tabs'
 import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { Building2, ChevronDown, ChevronRight, Network, Pencil, Plus, Trash2, UserRound } from 'lucide-react'
-import { useMemo, useState, type FormEvent } from 'react'
+import { Building2, ChevronDown, Network, Pencil, Plus, Trash2, UserRound, Users } from 'lucide-react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
 import { Field, Input, Select } from '../components/ui/field'
-import { EmptyState, ErrorState, PageHeader, Skeleton } from '../components/ui/layout'
+import { TableFrame, TableSkeleton, thClass, trClass } from '../components/ui/data-table'
+import { Avatar, EmptyState, ErrorState, PageHeader, Skeleton } from '../components/ui/layout'
+import { TabList, Tabs } from '../components/ui/tabs'
+import { gsap, MOTION, useGSAP } from '../lib/gsap'
 import { api, ApiError } from '../lib/api'
 import { cn } from '../lib/cn'
 import { orgQueries } from '../lib/queries'
@@ -24,21 +26,16 @@ const TABS = [
 ] as const
 
 export function StructurePage() {
+  const [tab, setTab] = useState<string>('organograma')
   return (
     <>
-      <PageHeader title="Estrutura" description="Como a empresa se organiza: departamentos, quem os lidera, unidades, cargos e centros de custo." />
-      <Tabs.Root defaultValue="organograma">
-        <Tabs.List aria-label="Seções da estrutura" className="mb-5 flex gap-6 overflow-x-auto border-b border-line">
-          {TABS.map(([value, label]) => (
-            <Tabs.Trigger
-              key={value}
-              value={value}
-              className="-mb-px shrink-0 border-b-2 border-transparent pb-2.5 text-[15px] text-steel hover:text-ink data-[state=active]:border-ink data-[state=active]:font-medium data-[state=active]:text-ink"
-            >
-              {label}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
+      <PageHeader
+        eyebrow="Organização"
+        title="Estrutura"
+        description="Como a empresa se organiza: departamentos, quem os lidera, unidades, cargos e centros de custo."
+      />
+      <Tabs.Root value={tab} onValueChange={setTab}>
+        <TabList label="Seções da estrutura" value={tab} items={TABS.map(([value, label]) => ({ value, label }))} />
         <Tabs.Content value="organograma"><OrgChart /></Tabs.Content>
         <Tabs.Content value="departamentos"><DepartmentsTab /></Tabs.Content>
         <Tabs.Content value="unidades">
@@ -111,7 +108,7 @@ function OrgChart() {
   if (query.isPending) return <Skeleton className="h-64" />
   if (tree.length === 0)
     return (
-      <div className="rounded-md border border-line bg-paper">
+      <div className="surface">
         <EmptyState icon={Network} title="Nenhum departamento ainda">
           Crie os departamentos na aba Departamentos e indique a quem cada um se subordina.
         </EmptyState>
@@ -119,37 +116,82 @@ function OrgChart() {
     )
 
   return (
-    <div className="overflow-x-auto rounded-md border border-line bg-paper p-5">
-      <ul role="tree" aria-label="Organograma" className="flex flex-col gap-1">
+    <div data-reveal className="surface overflow-x-auto p-5 sm:p-6">
+      <ul role="tree" aria-label="Organograma" className="flex flex-col gap-2">
         {tree.map(node => <OrgNode key={node.id} node={node} depth={0} canSeePeople={canSeePeople} />)}
       </ul>
     </div>
   )
 }
 
+/**
+ * Nó do organograma. Abrir e fechar anima a altura do grupo de subáreas
+ * (GSAP), com os filhos entrando em cascata.
+ */
 function OrgNode({ node, depth, canSeePeople }: { node: Node; depth: number; canSeePeople: boolean }) {
   const [open, setOpen] = useState(depth < 2)
   const hasChildren = node.children.length > 0
   const total = totalHeadcount(node)
+  const group = useRef<HTMLUListElement>(null)
+  const closing = useRef(false)
+  // Abriu: o grupo (já no DOM) cresce e os filhos entram em cascata.
+  const first = useRef(true)
+  useGSAP(
+    () => {
+      if (first.current || !open || !group.current) return void (first.current = false)
+      const mm = gsap.matchMedia()
+      mm.add(MOTION.ok, () => {
+        gsap.fromTo(group.current, { height: 0, autoAlpha: 0 }, { height: 'auto', autoAlpha: 1, duration: 0.5, clearProps: 'height,opacity,visibility' })
+        gsap.from(group.current!.children, { x: -12, autoAlpha: 0, stagger: 0.04, duration: 0.45, delay: 0.08, clearProps: 'transform,opacity,visibility' })
+      })
+    },
+    { dependencies: [open] },
+  )
+  const { contextSafe } = useGSAP()
+  // Fechando: recolhe antes de sair do DOM.
+  const toggle = contextSafe(() => {
+    const el = group.current
+    if (!open || !el || !window.matchMedia(MOTION.ok).matches) return setOpen(!open)
+    if (closing.current) return
+    closing.current = true
+    gsap.to(el, {
+      height: 0,
+      autoAlpha: 0,
+      duration: 0.35,
+      ease: 'power2.inOut',
+      onComplete: () => {
+        closing.current = false
+        setOpen(false)
+      },
+    })
+  })
+  const root = depth === 0
   return (
     <li role="treeitem" aria-expanded={hasChildren ? open : undefined} aria-level={depth + 1}>
-      <div className={cn('flex items-center gap-2 rounded-sm py-1.5 pr-3', depth === 0 && 'pb-2')}>
+      <div className="group/node flex items-center gap-2 py-1">
         <button
           type="button"
-          onClick={() => setOpen(!open)}
+          onClick={toggle}
           disabled={!hasChildren}
           aria-label={open ? `Recolher ${node.name}` : `Expandir ${node.name}`}
-          className="flex size-6 items-center justify-center rounded-sm text-steel hover:bg-concrete disabled:invisible"
+          className="flex size-7 shrink-0 items-center justify-center rounded-full text-steel transition-colors hover:bg-ink/5 hover:text-ink disabled:invisible"
         >
-          {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+          <ChevronDown className={cn('size-4 transition-transform duration-300', !open && '-rotate-90')} />
         </button>
-        <div className={cn('flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 rounded-sm border px-3 py-2', depth === 0 ? 'border-ink bg-ink text-paper' : 'border-line bg-paper')}>
-          <span className={cn('font-display text-lg font-semibold', depth === 0 ? 'text-brand' : 'text-ink')}>{node.name}</span>
-          <span className={cn('flex items-center gap-1.5 text-sm', depth === 0 ? 'text-paper/80' : 'text-steel')}>
-            <UserRound className="size-3.5" aria-hidden />
+        <div
+          className={cn(
+            'relative flex min-w-0 flex-1 flex-wrap items-center gap-x-5 gap-y-1.5 overflow-hidden rounded-md border px-4 py-3 transition-all duration-300',
+            root ? 'night-glow border-night-line text-snow shadow-lift' : 'border-line bg-paper shadow-xs group-hover/node:border-line-strong group-hover/node:shadow-card',
+          )}
+        >
+          {!root && <span className="absolute inset-y-0 left-0 w-[3px] bg-brand opacity-0 transition-opacity group-hover/node:opacity-100" aria-hidden />}
+          <span className={cn('font-display text-[21px] leading-none font-semibold', root ? 'text-brand' : 'text-ink')}>{node.name}</span>
+          <span className={cn('flex items-center gap-2 text-[13px]', root ? 'text-fog' : 'text-steel')}>
+            {node.managerName ? <Avatar name={node.managerName} size="sm" className="rounded-full" /> : <UserRound className="size-3.5" aria-hidden />}
             {node.managerName ?? 'Sem gestor'}
           </span>
-          <span className={cn('num ml-auto text-sm', depth === 0 ? 'text-paper/80' : 'text-steel')}>
+          <span className={cn('num ml-auto flex items-center gap-1.5 text-[13px]', root ? 'text-fog' : 'text-steel')}>
+            <Users className="size-3.5" aria-hidden />
             {canSeePeople ? (
               <Link to="/colaboradores" search={{ departmentId: node.id }} className="underline-offset-2 hover:underline">
                 {node.headcount} {node.headcount === 1 ? 'pessoa' : 'pessoas'}
@@ -162,7 +204,7 @@ function OrgNode({ node, depth, canSeePeople }: { node: Node; depth: number; can
         </div>
       </div>
       {hasChildren && open && (
-        <ul role="group" className="ml-[11px] flex flex-col gap-1 border-l border-line-strong pl-5">
+        <ul ref={group} role="group" className="ml-[13px] flex flex-col gap-2 overflow-hidden border-l-2 border-dashed border-line-strong pt-1 pl-6">
           {node.children.map(child => <OrgNode key={child.id} node={child} depth={depth + 1} canSeePeople={canSeePeople} />)}
         </ul>
       )}
@@ -445,31 +487,42 @@ function DataTable<T extends { id: string }>({
   loading: boolean
   empty: string
 }) {
-  if (loading) return <Skeleton className="h-48" />
+  if (loading)
+    return (
+      <TableFrame>
+        <TableSkeleton rows={5} />
+      </TableFrame>
+    )
   if (rows.length === 0)
     return (
-      <div className="rounded-md border border-line bg-paper">
+      <TableFrame>
         <EmptyState icon={Building2} title={empty} />
-      </div>
+      </TableFrame>
     )
   return (
-    <div className="overflow-x-auto rounded-md border border-line bg-paper">
-      <table className="w-full min-w-[560px] text-left text-sm">
-        <thead className="border-b border-line bg-concrete/60 text-[13px] text-steel">
-          <tr>
-            {columns.map(([label]) => <th key={label} scope="col" className="px-5 py-2.5 font-medium">{label}</th>)}
-            {actions && <th scope="col" className="w-24 px-5 py-2.5"><span className="sr-only">Ações</span></th>}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {rows.map(row => (
-            <tr key={row.id} className="hover:bg-concrete/50">
-              {columns.map(([label, render]) => <td key={label} className="px-5 py-2.5 text-ink-soft">{render(row)}</td>)}
-              {actions && <td className="px-3 py-1.5 text-right whitespace-nowrap">{actions(row)}</td>}
+    <TableFrame>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-left text-sm">
+          <thead className="border-b border-line bg-sunken/70">
+            <tr>
+              {columns.map(([label]) => <th key={label} scope="col" className={thClass}>{label}</th>)}
+              {actions && <th scope="col" className="w-24 px-5 py-3"><span className="sr-only">Ações</span></th>}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {rows.map(row => (
+              <tr key={row.id} data-reveal-row className={trClass}>
+                {columns.map(([label, render]) => <td key={label} className="px-5 py-3 text-ink-soft">{render(row)}</td>)}
+                {actions && (
+                  <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                    <div className="flex justify-end gap-0.5 opacity-70 transition-opacity group-hover/row:opacity-100">{actions(row)}</div>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </TableFrame>
   )
 }

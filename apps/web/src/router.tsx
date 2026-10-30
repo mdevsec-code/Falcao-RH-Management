@@ -168,9 +168,15 @@ const routeTree = rootRoute.addChildren([
 /** Enquanto a tela é baixada: a moldura da página, nunca um vazio. */
 function PagePending() {
   return (
-    <div className="flex flex-col gap-4" role="status" aria-label="Carregando">
-      <Skeleton className="h-9 w-56" />
-      <Skeleton className="h-36" />
+    <div className="flex flex-col gap-5" role="status" aria-label="Carregando">
+      <Skeleton className="h-3 w-32 rounded-full" />
+      <Skeleton className="h-12 w-72" />
+      <Skeleton className="h-4 w-96 max-w-full rounded-full" />
+      <div className="mt-3 grid gap-5 md:grid-cols-3">
+        <Skeleton className="h-36" />
+        <Skeleton className="h-36" />
+        <Skeleton className="h-36" />
+      </div>
       <Skeleton className="h-64" />
     </div>
   )

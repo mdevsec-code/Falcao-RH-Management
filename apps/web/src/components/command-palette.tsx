@@ -94,15 +94,17 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="drawer-overlay fixed inset-0 z-50 bg-ink/50 backdrop-blur-[3px]" />
+        <Dialog.Overlay className="drawer-overlay fixed inset-0 z-50 bg-night/45 backdrop-blur-[4px]" />
         <Dialog.Content
-          className="dialog fixed inset-x-0 top-[12vh] z-50 mx-auto w-[min(640px,calc(100vw-24px))] overflow-hidden rounded-md border border-ink/20 bg-paper shadow-2xl focus:outline-none"
+          className="dialog fixed inset-x-0 top-[12vh] z-50 mx-auto w-[min(660px,calc(100vw-24px))] overflow-hidden rounded-xl border border-line bg-paper shadow-pop focus:outline-none"
           onKeyDown={onKeyDown}
         >
           <Dialog.Title className="sr-only">Ir para ou buscar</Dialog.Title>
           <Dialog.Description className="sr-only">Digite para filtrar telas ou buscar colaboradores. Use as setas e Enter.</Dialog.Description>
           <div className="flex items-center gap-3 border-b border-line px-5">
-            <Search className="size-5 text-steel" aria-hidden />
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-brand text-night shadow-brand">
+              <Search className="size-4" aria-hidden />
+            </span>
             <input
               autoFocus
               value={query}
@@ -112,11 +114,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               aria-expanded
               aria-controls="palette-list"
               aria-activedescendant={commands[active] ? `palette-${commands[active].id}` : undefined}
-              className="h-14 flex-1 bg-transparent text-[17px] text-ink placeholder:text-steel-soft focus:outline-none focus-visible:shadow-none focus-visible:outline-none"
+              className="h-16 flex-1 bg-transparent text-[17px] text-ink placeholder:text-steel-soft focus:outline-none focus-visible:shadow-none focus-visible:outline-none"
             />
-            <kbd className="rounded-sm border border-line px-1.5 py-0.5 text-[11px] text-steel">Esc</kbd>
+            <kbd className="rounded-[6px] border border-line bg-sunken px-1.5 py-0.5 font-sans text-[11px] text-steel">Esc</kbd>
           </div>
-          <ul ref={list} id="palette-list" role="listbox" className="max-h-[55vh] overflow-y-auto p-2">
+          <ul ref={list} id="palette-list" role="listbox" className="max-h-[55vh] overflow-y-auto p-2.5">
             {commands.length === 0 && (
               <li className="px-3 py-10 text-center text-sm text-steel">
                 {people.isFetching ? 'Buscando…' : 'Nada encontrado. Tente outro nome ou tela.'}
@@ -127,7 +129,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               lastGroup = command.group
               return (
                 <li key={command.id} role="presentation">
-                  {header && <p className="px-3 pt-3 pb-1.5 text-[12px] font-medium text-steel">{header}</p>}
+                  {header && <p className="eyebrow px-3 pt-3 pb-2">{header}</p>}
                   <button
                     type="button"
                     id={`palette-${command.id}`}
@@ -137,15 +139,22 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                     onMouseMove={() => setActive(index)}
                     onClick={command.run}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-left transition-colors',
-                      index === active ? 'bg-ink text-paper' : 'text-ink-soft',
+                      'flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors duration-150',
+                      index === active ? 'bg-night text-snow shadow-card' : 'text-ink-soft',
                     )}
                   >
-                    <command.icon className={cn('size-[18px] shrink-0', index === active ? 'text-brand' : 'text-steel')} aria-hidden />
+                    <span
+                      className={cn(
+                        'flex size-8 shrink-0 items-center justify-center rounded-sm transition-colors',
+                        index === active ? 'bg-white/10 text-brand' : 'bg-sunken text-steel ring-1 ring-line',
+                      )}
+                    >
+                      <command.icon className="size-4" aria-hidden />
+                    </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[15px]">{command.label}</span>
                       {command.hint && (
-                        <span className={cn('block truncate text-[13px]', index === active ? 'text-paper/65' : 'text-steel')}>{command.hint}</span>
+                        <span className={cn('block truncate text-[13px]', index === active ? 'text-fog' : 'text-steel')}>{command.hint}</span>
                       )}
                     </span>
                     {index === active && <CornerDownLeft className="size-4 text-brand" aria-hidden />}
@@ -154,6 +163,18 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               )
             })}
           </ul>
+          <div className="flex items-center gap-4 border-t border-line bg-sunken/70 px-5 py-2.5 text-[11.5px] text-steel">
+            <span className="flex items-center gap-1.5">
+              <kbd className="rounded-[5px] border border-line bg-paper px-1 font-sans">↑</kbd>
+              <kbd className="rounded-[5px] border border-line bg-paper px-1 font-sans">↓</kbd> navegar
+            </span>
+            <span className="flex items-center gap-1.5">
+              <kbd className="rounded-[5px] border border-line bg-paper px-1 font-sans">Enter</kbd> abrir
+            </span>
+            <span className="ml-auto font-display text-[13px] font-semibold tracking-wide text-ink">
+              Falcão <span className="text-brand-strong">RH</span>
+            </span>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

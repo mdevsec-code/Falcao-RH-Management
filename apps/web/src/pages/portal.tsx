@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { IdCard, Pencil, Upload } from 'lucide-react'
+import { FileText, IdCard, Info, Milestone, Pencil, Upload } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
@@ -31,14 +31,14 @@ export function PortalPage() {
 
   if (!me.employeeId)
     return (
-      <div className="rounded-md border border-line bg-paper">
+      <div className="surface">
         <EmptyState icon={IdCard} title="Seu acesso ainda não está ligado a uma ficha">
           Peça ao RH para vincular seu usuário ao seu cadastro de colaborador.
         </EmptyState>
       </div>
     )
   if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />
-  if (query.isPending) return <Skeleton className="h-80" />
+  if (query.isPending) return <Skeleton className="h-72 rounded-xl" />
 
   const employee = query.data
   return (
@@ -55,6 +55,7 @@ export function PortalPage() {
         <ProfileDetails employee={employee} />
         <Panel
           title="Meus documentos"
+          icon={FileText}
           aside={
             <Button size="sm" onClick={() => setUploading(true)}>
               <Upload className="size-4" aria-hidden /> Enviar
@@ -62,12 +63,13 @@ export function PortalPage() {
           }
           bodyClassName="p-0"
         >
-          <DocumentTable rows={documents.data ?? []} loading={documents.isPending} onOpen={setDocId} showEmployee={false} empty="Nenhum documento no seu cadastro" />
+          <DocumentTable bare rows={documents.data ?? []} loading={documents.isPending} onOpen={setDocId} showEmployee={false} empty="Nenhum documento no seu cadastro" />
         </Panel>
-        <Panel title="Minha trajetória">
+        <Panel title="Minha trajetória" icon={Milestone}>
           <ProfileHistory history={employee.history} />
         </Panel>
-        <p className="text-sm text-steel">
+        <p className="flex items-center gap-2.5 rounded-md border border-line bg-paper px-4 py-3 text-sm text-steel shadow-xs">
+          <Info className="size-4 shrink-0 text-info" aria-hidden />
           Encontrou algo errado no cargo, departamento ou datas? Fale com o RH: esses dados só mudam por lá.
         </p>
       </div>

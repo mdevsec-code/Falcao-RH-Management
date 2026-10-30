@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronLeft, ChevronRight, Clock, Lock, X } from 'lucide-react'
-import { motion } from 'motion/react'
-import { useMemo, useState, type FormEvent } from 'react'
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Lock, Palmtree, Stethoscope, X } from 'lucide-react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
 import {
@@ -20,10 +19,12 @@ import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
 import { Field, Input, Select, Textarea } from '../components/ui/field'
 import { FileInput } from '../components/ui/file-input'
+import { Ring } from '../components/motion'
 import { Badge, Skeleton } from '../components/ui/layout'
 import { api, apiUpload, ApiError } from '../lib/api'
 import { cn } from '../lib/cn'
 import { formatDate, todayIso } from '../lib/format'
+import { canHover, Draggable, gsap, MOTION, useGSAP } from '../lib/gsap'
 import { useMe } from '../lib/session'
 import type { CalendarItem, DocumentCategory, EmployeeListItem, Page, RequestDetail, RequestItem, VacationBalance } from '../lib/types'
 
@@ -139,62 +140,28 @@ export function RequestDrawer({ id, onClose }: { id: string | null; onClose: () 
               </span>
             )}
           </div>
-          <dl className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <dt className="text-[13px] text-steel">Período</dt>
-              <dd className="text-ink">{formatDate(r.startDate)} a {formatDate(r.endDate)}</dd>
+          <dl className="grid grid-cols-2 overflow-hidden rounded-md border border-line text-sm">
+            <div className="border-r border-line bg-sunken/60 px-4 py-3.5">
+              <dt className="text-[11.5px] tracking-wide text-steel uppercase">Período</dt>
+              <dd className="num mt-1 font-medium text-ink">
+                {formatDate(r.startDate)} a {formatDate(r.endDate)}
+              </dd>
             </div>
-            <div>
-              <dt className="text-[13px] text-steel">Duração</dt>
-              <dd className="num font-display text-2xl leading-none font-semibold text-ink">{r.days} {r.days === 1 ? 'dia' : 'dias'}</dd>
+            <div className="bg-sunken/60 px-4 py-3.5">
+              <dt className="text-[11.5px] tracking-wide text-steel uppercase">Duração</dt>
+              <dd className="num mt-0.5 font-display text-[30px] leading-none font-semibold text-ink">
+                {r.days} <span className="text-[18px] text-steel">{r.days === 1 ? 'dia' : 'dias'}</span>
+              </dd>
             </div>
             {r.notes && (
-              <div className="col-span-2">
-                <dt className="text-[13px] text-steel">Observações</dt>
-                <dd className="text-ink">{r.notes}</dd>
+              <div className="col-span-2 border-t border-line px-4 py-3.5">
+                <dt className="text-[11.5px] tracking-wide text-steel uppercase">Observações</dt>
+                <dd className="mt-1 text-ink">{r.notes}</dd>
               </div>
             )}
           </dl>
 
-          <section>
-            <h3 className="mb-3 font-medium text-ink">Aprovação</h3>
-            <ol className="relative ml-2 border-l-2 border-line">
-              {r.steps.map((step, i) => (
-                <motion.li
-                  key={step.id}
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.08 }}
-                  className="relative pb-5 pl-7 last:pb-0"
-                >
-                  <span
-                    className={cn(
-                      'absolute top-0 -left-[11px] flex size-5 items-center justify-center rounded-full border-2 border-paper',
-                      step.status === 'approved' && 'bg-ok text-paper',
-                      step.status === 'rejected' && 'bg-danger text-paper',
-                      step.status === 'pending' && 'bg-brand text-ink',
-                      (step.status === 'waiting' || step.status === 'skipped') && 'bg-line text-steel',
-                    )}
-                    aria-hidden
-                  >
-                    {STEP_ICON[step.status]}
-                  </span>
-                  <p className={cn('text-sm font-medium', step.status === 'skipped' ? 'text-steel-soft line-through' : 'text-ink')}>
-                    {APPROVER_LABELS[step.approverKind]}
-                    {step.approverName && <span className="font-normal text-steel">: {step.approverName}</span>}
-                  </p>
-                  <p className="text-[13px] text-steel">
-                    {step.status === 'pending' && 'Aguardando decisão'}
-                    {step.status === 'waiting' && 'Na fila, depois da etapa anterior'}
-                    {step.status === 'skipped' && 'Etapa não aplicável'}
-                    {(step.status === 'approved' || step.status === 'rejected') &&
-                      `${step.status === 'approved' ? 'Aprovado' : 'Recusado'} por ${step.decidedByName ?? 'sistema'} em ${new Date(step.decidedAt!).toLocaleString('pt-BR')}`}
-                  </p>
-                  {step.comment && <p className="mt-1 text-sm text-ink-soft">“{step.comment}”</p>}
-                </motion.li>
-              ))}
-            </ol>
-          </section>
+          <ApprovalSteps steps={r.steps} />
 
           {r.canDecide && (
             <Field label="Comentário" hint="Obrigatório para recusar; opcional para aprovar.">
@@ -204,6 +171,76 @@ export function RequestDrawer({ id, onClose }: { id: string | null; onClose: () 
         </div>
       )}
     </Drawer>
+  )
+}
+
+/**
+ * Etapas de aprovação: a linha amarela é desenhada até a última etapa
+ * decidida e cada marco entra em seguida, como um carimbo.
+ */
+function ApprovalSteps({ steps }: { steps: RequestDetail['steps'] }) {
+  const ref = useRef<HTMLElement>(null)
+  const decided = steps.filter(s => s.status === 'approved' || s.status === 'rejected').length
+  const progress = steps.length > 1 ? Math.min(1, decided / (steps.length - 1)) : 0
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia()
+      gsap.set('[data-step-line]', { scaleY: progress, transformOrigin: 'top' })
+      mm.add(MOTION.ok, () => {
+        gsap
+          .timeline({ delay: 0.25 })
+          .from('[data-step]', { x: -10, autoAlpha: 0, stagger: 0.1, duration: 0.6 })
+          .from('[data-step-mark]', { scale: 0, rotate: -40, stagger: 0.1, duration: 0.5, ease: 'back.out(3)' }, 0.05)
+          .fromTo('[data-step-line]', { scaleY: 0 }, { scaleY: progress, duration: 0.9, ease: 'power2.inOut' }, 0.2)
+      })
+    },
+    { scope: ref, dependencies: [steps.map(s => s.status).join()] },
+  )
+  return (
+    <section ref={ref}>
+      <h3 className="eyebrow mb-4">Fluxo de aprovação</h3>
+      <ol className="relative">
+        {steps.length > 1 && (
+          <>
+            <span className="absolute top-4 bottom-4 left-[15px] w-[2px] rounded-full bg-line" aria-hidden />
+            <span data-step-line className="absolute top-4 bottom-4 left-[15px] w-[2px] rounded-full bg-ok" aria-hidden />
+          </>
+        )}
+        {steps.map(step => (
+          <li data-step key={step.id} className="relative flex gap-4 pb-6 last:pb-0">
+            <span
+              data-step-mark
+              className={cn(
+                'relative z-[1] flex size-8 shrink-0 items-center justify-center rounded-full ring-4 ring-paper',
+                step.status === 'approved' && 'bg-ok text-snow',
+                step.status === 'rejected' && 'bg-danger text-snow',
+                step.status === 'pending' && 'bg-brand text-night shadow-[0_0_0_6px_rgb(254_190_2/0.2)]',
+                (step.status === 'waiting' || step.status === 'skipped') && 'border border-line-strong bg-sunken text-steel',
+              )}
+              aria-hidden
+            >
+              {STEP_ICON[step.status] ?? <span className="size-1.5 rounded-full bg-current" />}
+            </span>
+            <div className="min-w-0 flex-1 pt-1">
+              <p className={cn('text-[14.5px] font-medium', step.status === 'skipped' ? 'text-steel-soft line-through' : 'text-ink')}>
+                {APPROVER_LABELS[step.approverKind]}
+                {step.approverName && <span className="font-normal text-steel"> · {step.approverName}</span>}
+              </p>
+              <p className="text-[13px] text-steel">
+                {step.status === 'pending' && 'Aguardando decisão'}
+                {step.status === 'waiting' && 'Na fila, depois da etapa anterior'}
+                {step.status === 'skipped' && 'Etapa não aplicável'}
+                {(step.status === 'approved' || step.status === 'rejected') &&
+                  `${step.status === 'approved' ? 'Aprovado' : 'Recusado'} por ${step.decidedByName ?? 'sistema'} em ${new Date(step.decidedAt!).toLocaleString('pt-BR')}`}
+              </p>
+              {step.comment && (
+                <p className="mt-2 rounded-sm rounded-tl-none border border-line bg-sunken px-3 py-2 text-[13.5px] text-ink-soft">“{step.comment}”</p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
   )
 }
 
@@ -317,12 +354,17 @@ export function NewRequestDrawer({
               aria-checked={type === option}
               onClick={() => setType(option)}
               className={cn(
-                'relative rounded-sm border px-4 py-3 text-left transition-colors',
-                type === option ? 'border-ink bg-ink text-paper' : 'border-line-strong bg-paper text-ink-soft hover:border-ink',
+                'relative overflow-hidden rounded-md border px-4 py-3.5 text-left transition-all duration-300',
+                type === option ? 'border-night bg-night text-snow shadow-lift' : 'border-line-strong bg-paper text-ink-soft hover:border-steel-soft hover:bg-sunken',
               )}
             >
+              {(() => {
+                const Icon = option === 'vacation' ? Palmtree : Stethoscope
+                return <Icon className={cn('mb-2 size-5 transition-colors', type === option ? 'text-brand' : 'text-steel')} aria-hidden />
+              })()}
+              {type === option && <span className="absolute top-3 right-3 size-2 rounded-full bg-brand shadow-[0_0_0_4px_rgb(254_190_2/0.2)]" aria-hidden />}
               <span className="block font-medium">{option === 'vacation' ? 'Férias' : 'Ausência'}</span>
-              <span className={cn('block text-[13px]', type === option ? 'text-paper/70' : 'text-steel')}>
+              <span className={cn('block text-[12.5px]', type === option ? 'text-fog' : 'text-steel')}>
                 {option === 'vacation' ? 'Descanso anual remunerado' : 'Folga, atestado, licença'}
               </span>
             </button>
@@ -358,16 +400,20 @@ export function NewRequestDrawer({
         </div>
 
         {type === 'vacation' && (
-          <div className="rounded-sm border border-line bg-concrete/60 p-4 text-sm">
-            <div className="flex items-baseline justify-between">
-              <span className="text-steel">Dias corridos pedidos</span>
-              <span className="num font-display text-3xl leading-none font-semibold text-ink">{days}</span>
+          <div className="rounded-md border border-line bg-sunken p-4 text-sm">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-sm bg-paper px-3.5 py-3 shadow-xs ring-1 ring-line">
+                <span className="text-[12px] text-steel">Dias corridos pedidos</span>
+                <span className="num block font-display text-[34px] leading-none font-semibold text-ink">{days}</span>
+              </div>
+              <div className="rounded-sm bg-paper px-3.5 py-3 shadow-xs ring-1 ring-line">
+                <span className="text-[12px] text-steel">Saldo disponível</span>
+                <span className={cn('num block font-display text-[34px] leading-none font-semibold', balance.data && days > balance.data.available ? 'text-danger' : 'text-ink')}>
+                  {balance.data ? balance.data.available : '…'}
+                </span>
+              </div>
             </div>
-            <div className="mt-2 flex items-baseline justify-between">
-              <span className="text-steel">Saldo disponível</span>
-              <span className="num font-semibold text-ink">{balance.data ? `${balance.data.available} dias` : '…'}</span>
-            </div>
-            <p className="mt-3 text-[13px] text-steel">
+            <p className="mt-3 text-[12.5px] leading-relaxed text-steel">
               Regras da CLT: cada parte com pelo menos 5 dias, uma delas com 14 ou mais, até 3 partes por período, sem começar na
               sexta ou no sábado. O sistema confere tudo ao enviar.
             </p>
@@ -393,31 +439,39 @@ export function VacationBalanceCard({ balance }: { balance: VacationBalance | un
   if (!balance) return <Skeleton className="h-40" />
   const periods = balance.periods.filter(p => p.complete && (p.remaining > 0 || p.pending > 0)).reverse()
   const current = balance.periods.find(p => !p.complete)
+  const entitled = periods.reduce((sum, p) => sum + p.entitled, 0)
   return (
-    <section className="overflow-hidden rounded-md border border-line bg-paper">
-      <div className="flex items-end justify-between gap-4 bg-ink px-6 py-5">
-        <div>
-          <p className="text-sm text-steel-soft">Saldo de férias</p>
-          <p className="num font-display text-[64px] leading-[0.9] font-semibold text-brand">{balance.available}</p>
+    <section data-reveal className="surface overflow-hidden">
+      <div className="night-glow grain relative flex items-center gap-6 px-6 py-6 text-snow">
+        <Ring value={entitled ? balance.available / entitled : 0} size={112} thickness={9}>
+          <span>
+            <span className="num block font-display text-[40px] leading-none font-semibold text-brand">{balance.available}</span>
+            <span className="text-[10.5px] tracking-[0.14em] text-fog uppercase">dias</span>
+          </span>
+        </Ring>
+        <div className="relative min-w-0">
+          <p className="text-[11px] font-medium tracking-[0.16em] text-fog uppercase">Saldo de férias</p>
+          <p className="mt-1.5 font-display text-[28px] leading-none font-semibold">
+            {balance.available} {balance.available === 1 ? 'dia disponível' : 'dias disponíveis'}
+          </p>
+          <p className="mt-2 text-[12.5px] text-fog">Somando os períodos aquisitivos completos.</p>
         </div>
-        <p className="mb-1 text-right text-sm text-paper/80">dias disponíveis</p>
       </div>
       <ul className="divide-y divide-line">
         {periods.map(p => {
           const used = p.entitled - p.remaining
           return (
-            <li key={p.start} className="px-6 py-3.5 text-sm">
+            <li key={p.start} className="px-6 py-4 text-sm">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-ink">Período {formatDate(p.start)} a {formatDate(p.end)}</span>
-                <span className="num text-steel">{p.remaining} de {p.entitled} dias</span>
+                <span className="num text-ink">
+                  {formatDate(p.start)} a {formatDate(p.end)}
+                </span>
+                <span className="num text-[13px] text-steel">
+                  <span className="font-semibold text-ink">{p.remaining}</span> de {p.entitled} dias
+                </span>
               </div>
-              <div className="mt-2 h-2 overflow-hidden rounded-[2px] bg-concrete">
-                <motion.div
-                  className="h-full bg-ink"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${p.entitled ? (used / p.entitled) * 100 : 0}%` }}
-                  transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                />
+              <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-sunken ring-1 ring-line ring-inset">
+                <div data-used className="h-full rounded-full bg-ink" style={{ width: `${p.entitled ? (used / p.entitled) * 100 : 0}%` }} />
               </div>
               <p className={cn('mt-1.5 text-[13px]', p.deadline < todayIso() ? 'font-medium text-danger' : p.deadline <= addDaysIso(todayIso(), 60) ? 'font-medium text-ink' : 'text-steel')}>
                 {p.deadline < todayIso() ? `Prazo vencido em ${formatDate(p.deadline)}: pagamento em dobro (CLT art. 137)` : `Tire até ${formatDate(p.deadline)}`}
@@ -472,70 +526,102 @@ export function TimelineCalendar({ onOpen }: { onOpen: (id: string) => void }) {
   const dayIndex = (iso: string) => Math.min(daysInMonth, Math.max(1, iso < first ? 1 : iso > last ? daysInMonth : Number(iso.slice(8))))
   const weekend = (day: number) => [0, 6].includes(new Date(Date.UTC(y, m - 1, day)).getUTCDay())
   const todayDay = today.startsWith(month) ? Number(today.slice(8)) : null
-  const grid = { gridTemplateColumns: `200px repeat(${daysInMonth}, minmax(22px, 1fr))` }
+  const grid = { gridTemplateColumns: `220px repeat(${daysInMonth}, minmax(24px, 1fr))` }
+  const scroller = useRef<HTMLDivElement>(null)
+  const title = useRef<HTMLHeadingElement>(null)
+
+  // Barras crescem da data de início, em cascata por pessoa, a cada mês exibido.
+  useGSAP(
+    () => {
+      const mm = gsap.matchMedia()
+      mm.add(MOTION.ok, () => {
+        gsap.from('[data-bar]', { scaleX: 0, transformOrigin: 'left', duration: 0.8, ease: 'expo.out', stagger: 0.035 })
+        gsap.from(title.current, { y: 10, autoAlpha: 0, duration: 0.5 })
+      })
+    },
+    { scope: scroller, dependencies: [month, rows.length], revertOnUpdate: true },
+  )
+
+  // Com mouse, o mês inteiro pode ser arrastado de lado, com inércia.
+  useGSAP(
+    () => {
+      if (!canHover() || !scroller.current) return
+      const [drag] = Draggable.create(scroller.current, { type: 'scrollLeft', inertia: true, allowNativeTouchScrolling: true, dragClickables: false, cursor: 'grab', activeCursor: 'grabbing' })
+      return () => drag?.kill()
+    },
+    { scope: scroller },
+  )
 
   return (
-    <section className="rounded-md border border-line bg-paper">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3">
-        <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={() => shift(-1)} aria-label="Mês anterior"><ChevronLeft className="size-4" /></Button>
-          <h2 className="min-w-44 text-center font-display text-xl font-semibold text-ink">
-            {MONTHS[m - 1]!.charAt(0).toUpperCase() + MONTHS[m - 1]!.slice(1)} de {y}
+    <section data-reveal className="surface overflow-hidden">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+        <div className="flex items-center gap-2">
+          <span className="mr-1 flex size-8 items-center justify-center rounded-sm bg-night text-brand">
+            <CalendarDays className="size-4" aria-hidden />
+          </span>
+          <Button size="icon" variant="ghost" onClick={() => shift(-1)} aria-label="Mês anterior"><ChevronLeft className="size-4" /></Button>
+          <h2 ref={title} key={month} className="min-w-48 text-center font-display text-[24px] leading-none font-semibold text-ink">
+            {MONTHS[m - 1]!.charAt(0).toUpperCase() + MONTHS[m - 1]!.slice(1)} <span className="text-steel">{y}</span>
           </h2>
-          <Button size="sm" variant="ghost" onClick={() => shift(1)} aria-label="Próximo mês"><ChevronRight className="size-4" /></Button>
+          <Button size="icon" variant="ghost" onClick={() => shift(1)} aria-label="Próximo mês"><ChevronRight className="size-4" /></Button>
+          {month !== today.slice(0, 7) && (
+            <Button size="sm" onClick={() => setMonth(today.slice(0, 7))}>
+              Hoje
+            </Button>
+          )}
         </div>
-        <div className="flex flex-wrap items-center gap-4 text-[13px] text-steel">
-          <span className="flex items-center gap-1.5"><span className="h-2.5 w-5 rounded-[2px] bg-brand" /> Férias</span>
-          <span className="flex items-center gap-1.5"><span className="h-2.5 w-5 rounded-[2px] bg-ink" /> Ausência</span>
-          <span className="flex items-center gap-1.5"><span className="pending-stripe h-2.5 w-5 rounded-[2px] border border-steel-soft" /> Aguardando</span>
+        <div className="flex flex-wrap items-center gap-4 text-[12.5px] text-steel">
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-5 rounded-full bg-brand" /> Férias</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-5 rounded-full bg-ink" /> Ausência</span>
+          <span className="flex items-center gap-1.5"><span className="pending-stripe h-2.5 w-5 rounded-full ring-1 ring-brand-strong/50" /> Aguardando</span>
         </div>
       </header>
-      <div className="overflow-x-auto">
-        <div className="min-w-[900px]">
+      <div ref={scroller} className="overflow-x-auto">
+        <div className="min-w-[960px]">
           <div className="grid border-b border-line text-center text-[11px] text-steel" style={grid}>
-            <div className="sticky left-0 bg-paper px-4 py-2 text-left text-[12px]">Pessoa</div>
+            <div className="sticky left-0 z-20 bg-paper px-5 py-2.5 text-left text-[11px] font-medium tracking-[0.08em] uppercase">Pessoa</div>
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => (
-              <div key={day} className={cn('num py-2', weekend(day) && 'bg-concrete/70', day === todayDay && 'font-semibold text-ink')}>
-                {day}
+              <div key={day} className={cn('num flex items-center justify-center py-2', weekend(day) && 'bg-sunken')}>
+                <span className={cn('flex size-6 items-center justify-center rounded-full', day === todayDay && 'bg-brand font-bold text-night')}>{day}</span>
               </div>
             ))}
           </div>
           {query.isPending ? (
             <Skeleton className="m-4 h-32" />
           ) : rows.length === 0 ? (
-            <p className="px-5 py-10 text-center text-sm text-steel">Ninguém de férias ou ausente neste mês.</p>
+            <p className="px-5 py-12 text-center text-sm text-steel">Ninguém de férias ou ausente neste mês.</p>
           ) : (
-            rows.map(([employeeId, row], r) => (
-              <div key={employeeId} className="relative grid items-center border-b border-line last:border-0" style={grid}>
-                <div className="sticky left-0 z-10 truncate bg-paper px-4 py-2.5 text-sm">
-                  <span className="block truncate text-ink">{row.name}</span>
-                  <span className="block truncate text-[12px] text-steel">{row.department ?? 'Sem departamento'}</span>
+            rows.map(([employeeId, row]) => (
+              <div key={employeeId} className="group/cal relative grid items-center border-b border-line transition-colors last:border-0 hover:bg-sunken/60" style={grid}>
+                <div className="sticky left-0 z-10 flex items-center gap-2.5 truncate bg-paper px-5 py-2.5 text-sm transition-colors group-hover/cal:bg-sunken">
+                  <span className="min-w-0">
+                    <span className="block truncate text-ink">{row.name}</span>
+                    <span className="block truncate text-[11.5px] text-steel">{row.department ?? 'Sem departamento'}</span>
+                  </span>
                 </div>
                 {Array.from({ length: daysInMonth }, (_, i) => (
-                  <div key={i} className={cn('h-full', weekend(i + 1) && 'bg-concrete/70')} style={{ gridColumn: i + 2, gridRow: 1 }} />
+                  <div key={i} className={cn('h-full', weekend(i + 1) && 'bg-sunken')} style={{ gridColumn: i + 2, gridRow: 1 }} />
                 ))}
-                {todayDay && <div className="pointer-events-none h-full w-px justify-self-center bg-danger/60" style={{ gridColumn: todayDay + 1, gridRow: 1 }} aria-hidden />}
+                {todayDay && <div className="pointer-events-none h-full w-[2px] justify-self-center bg-brand/70" style={{ gridColumn: todayDay + 1, gridRow: 1 }} aria-hidden />}
                 {row.items.map(item => (
-                  <motion.button
+                  <button
                     key={item.id}
+                    data-bar
                     type="button"
                     onClick={() => onOpen(item.id)}
-                    initial={{ scaleX: 0, opacity: 0 }}
-                    animate={{ scaleX: 1, opacity: 1 }}
-                    transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1], delay: r * 0.04 }}
-                    style={{ gridColumn: `${dayIndex(item.startDate) + 1} / ${dayIndex(item.endDate) + 2}`, gridRow: 1, transformOrigin: 'left' }}
+                    style={{ gridColumn: `${dayIndex(item.startDate) + 1} / ${dayIndex(item.endDate) + 2}`, gridRow: 1 }}
                     title={`${requestLabel(item)}: ${periodLabel(item)}`}
                     className={cn(
-                      'z-[1] mx-px h-6 truncate rounded-[3px] px-1.5 text-left text-[11px] font-medium transition-[filter] hover:brightness-95 focus-visible:z-20',
+                      'z-[1] mx-0.5 h-7 truncate rounded-full px-2.5 text-left text-[11px] font-semibold shadow-xs transition-[filter,transform] duration-200 hover:-translate-y-px hover:brightness-105 focus-visible:z-20',
                       item.status === 'pending'
-                        ? 'pending-stripe border border-steel-soft text-ink'
+                        ? 'pending-stripe text-ink ring-1 ring-brand-strong/50'
                         : item.type === 'vacation'
-                          ? 'bg-brand text-ink'
+                          ? 'bg-brand text-night'
                           : 'bg-ink text-paper',
                     )}
                   >
                     {item.days >= 3 ? requestLabel(item) : <span className="sr-only">{requestLabel(item)}</span>}
-                  </motion.button>
+                  </button>
                 ))}
               </div>
             ))

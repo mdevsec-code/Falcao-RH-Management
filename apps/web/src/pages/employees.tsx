@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
-import { ChevronLeft, ChevronRight, FileDown, FileUp, Plus, SearchX, Users } from 'lucide-react'
+import { ArrowUpRight, ChevronLeft, ChevronRight, FileDown, FileUp, Plus, Search, SearchX, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useEffect, useState } from 'react'
 
@@ -9,8 +9,9 @@ import { EMPLOYEE_STATUSES } from '@falcao-rh/contracts'
 import { EmployeeForm } from '../features/employee-form'
 import { ImportDrawer } from '../features/employee-import'
 import { Button } from '../components/ui/button'
+import { TableFrame, TableSkeleton, thClass, trClass } from '../components/ui/data-table'
 import { Input, Select } from '../components/ui/field'
-import { Badge, EmptyState, ErrorState, PageHeader, Skeleton } from '../components/ui/layout'
+import { Avatar, Badge, EmptyState, ErrorState, PageHeader } from '../components/ui/layout'
 import { api, apiDownload } from '../lib/api'
 import { cn } from '../lib/cn'
 import { contractLabel, formatDate, formatNumber, statusLabel, statusTone } from '../lib/format'
@@ -66,12 +67,15 @@ export function EmployeesPage() {
   const data = query.data
   const pages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1
   const filtered = Boolean(search.q || search.status || search.departmentId)
+  const clear = () => navigate({ to: '/colaboradores', search: {} })
+  const departmentName = departments.data?.find(d => d.id === search.departmentId)?.name
 
   return (
     <>
       <PageHeader
+        eyebrow="Gestão de pessoas"
         title="Colaboradores"
-        description={data ? `${formatNumber(data.total)} ${data.total === 1 ? 'pessoa encontrada' : 'pessoas encontradas'}.` : undefined}
+        description={data ? `${formatNumber(data.total)} ${data.total === 1 ? 'pessoa encontrada' : 'pessoas encontradas'}.` : 'Cadastro, fichas e histórico.'}
         actions={
           <>
             {canExport && (
@@ -93,112 +97,141 @@ export function EmployeesPage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Input
-          value={q}
-          onChange={e => setQ(e.target.value)}
-          placeholder="Nome, matrícula ou e-mail"
-          aria-label="Buscar"
-          className="max-w-xs"
-        />
-        <Select
-          aria-label="Situação"
-          value={search.status ?? ''}
-          onChange={e => setSearch({ status: (e.target.value || undefined) as EmployeeStatus | undefined, page: undefined })}
-          className="w-auto"
-        >
-          <option value="">Todas as situações</option>
-          {EMPLOYEE_STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
-        </Select>
-        <Select
-          aria-label="Departamento"
-          value={search.departmentId ?? ''}
-          onChange={e => setSearch({ departmentId: e.target.value || undefined, page: undefined })}
-          className="w-auto max-w-60"
-        >
-          <option value="">Todos os departamentos</option>
-          {departments.data?.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </Select>
-        {filtered && (
-          <Button variant="ghost" onClick={() => navigate({ to: '/colaboradores', search: {} })}>
-            Limpar filtros
-          </Button>
-        )}
-      </div>
-
       {query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
 
-      <div className={cn('overflow-hidden rounded-md border border-line bg-paper', query.isFetching && 'opacity-75')}>
-        {!data && query.isPending ? (
-          <div className="flex flex-col gap-3 p-5">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-9" />)}</div>
-        ) : data && data.items.length === 0 ? (
-          filtered ? (
-            <EmptyState icon={SearchX} title="Ninguém encontrado com esses filtros" action={<Button onClick={() => navigate({ to: '/colaboradores', search: {} })}>Limpar filtros</Button>}>
-              Confira a grafia ou tente buscar pela matrícula.
-            </EmptyState>
-          ) : (
-            <EmptyState
-              icon={Users}
-              title="Nenhum colaborador cadastrado"
-              action={canCreate && <Button variant="primary" onClick={() => setCreating(true)}>Cadastrar o primeiro</Button>}
-            >
-              Comece pelo cadastro das pessoas; departamentos e cargos podem ser criados em Estrutura.
-            </EmptyState>
-          )
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="border-b border-line bg-concrete/60 text-[13px] text-steel">
-                <tr>
-                  <th scope="col" className="px-5 py-2.5 font-medium">Colaborador</th>
-                  <th scope="col" className="px-3 py-2.5 font-medium">Cargo e departamento</th>
-                  <th scope="col" className="px-3 py-2.5 font-medium">Gestor</th>
-                  <th scope="col" className="px-3 py-2.5 font-medium">Admissão</th>
-                  <th scope="col" className="px-5 py-2.5 font-medium">Situação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {data?.items.map(e => (
-                  <tr key={e.id} className="group hover:bg-concrete/50">
-                    <td className="px-5 py-3">
-                      <Link to="/colaboradores/$id" params={{ id: e.id }} className="font-medium text-ink group-hover:underline">
-                        {e.socialName ?? e.fullName}
-                      </Link>
-                      <div className="num text-[13px] text-steel">Matrícula {e.registration}</div>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="text-ink-soft">{e.positionTitle ?? <span className="text-steel-soft">Sem cargo</span>}</div>
-                      <div className="text-[13px] text-steel">{e.departmentName ?? 'Sem departamento'}</div>
-                    </td>
-                    <td className="px-3 py-3 text-ink-soft">{e.managerName ?? <span className="text-steel-soft">Não definido</span>}</td>
-                    <td className="num px-3 py-3 text-ink-soft">
-                      {formatDate(e.hireDate)}
-                      <div className="text-[13px] text-steel">{contractLabel(e.contractType)}</div>
-                    </td>
-                    <td className="px-5 py-3">
-                      <Badge tone={statusTone(e.status)}>{statusLabel(e.status)}</Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {data && data.total > PAGE_SIZE && (
-          <nav aria-label="Paginação" className="flex items-center justify-between border-t border-line px-5 py-2.5 text-sm text-steel">
-            <span className="num">Página {page} de {pages}</span>
-            <div className="flex gap-1">
-              <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => setSearch({ page: page - 1 })} aria-label="Página anterior">
-                <ChevronLeft className="size-4" />
-              </Button>
-              <Button size="sm" variant="ghost" disabled={page >= pages} onClick={() => setSearch({ page: page + 1 })} aria-label="Próxima página">
-                <ChevronRight className="size-4" />
+      <TableFrame>
+        <div className="flex flex-wrap items-center gap-2 border-b border-line p-3">
+          <label className="relative min-w-56 flex-1 sm:max-w-sm">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-steel" aria-hidden />
+            <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Nome, matrícula ou e-mail" aria-label="Buscar" className="pl-9" />
+          </label>
+          <Select
+            aria-label="Situação"
+            value={search.status ?? ''}
+            onChange={e => setSearch({ status: (e.target.value || undefined) as EmployeeStatus | undefined, page: undefined })}
+            className="w-auto"
+          >
+            <option value="">Todas as situações</option>
+            {EMPLOYEE_STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
+          </Select>
+          <Select
+            aria-label="Departamento"
+            value={search.departmentId ?? ''}
+            onChange={e => setSearch({ departmentId: e.target.value || undefined, page: undefined })}
+            className="w-auto max-w-64"
+          >
+            <option value="">Todos os departamentos</option>
+            {departments.data?.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </Select>
+          {filtered && (
+            <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+              {search.status && <Chip onRemove={() => setSearch({ status: undefined, page: undefined })}>{statusLabel(search.status)}</Chip>}
+              {departmentName && <Chip onRemove={() => setSearch({ departmentId: undefined, page: undefined })}>{departmentName}</Chip>}
+              <Button size="sm" variant="ghost" onClick={clear}>
+                Limpar filtros
               </Button>
             </div>
+          )}
+        </div>
+
+        <div className={cn('transition-opacity duration-300', query.isFetching && data && 'opacity-60')}>
+          {!data && query.isPending ? (
+            <TableSkeleton rows={8} />
+          ) : data && data.items.length === 0 ? (
+            filtered ? (
+              <EmptyState icon={SearchX} title="Ninguém encontrado com esses filtros" action={<Button onClick={clear}>Limpar filtros</Button>}>
+                Confira a grafia ou tente buscar pela matrícula.
+              </EmptyState>
+            ) : (
+              <EmptyState
+                icon={Users}
+                title="Nenhum colaborador cadastrado"
+                action={canCreate && <Button variant="primary" onClick={() => setCreating(true)}>Cadastrar o primeiro</Button>}
+              >
+                Comece pelo cadastro das pessoas; departamentos e cargos podem ser criados em Estrutura.
+              </EmptyState>
+            )
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px] text-left text-sm">
+                <thead className="border-b border-line bg-sunken/70">
+                  <tr>
+                    <th scope="col" className={thClass}>Colaborador</th>
+                    <th scope="col" className={thClass}>Cargo e departamento</th>
+                    <th scope="col" className={thClass}>Gestor</th>
+                    <th scope="col" className={thClass}>Admissão</th>
+                    <th scope="col" className={thClass}>Situação</th>
+                    <th scope="col" className="w-12"><span className="sr-only">Abrir</span></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {data?.items.map(e => (
+                    <tr
+                      key={e.id}
+                      data-reveal-row
+                      className={cn(trClass, 'cursor-pointer')}
+                      onClick={() => navigate({ to: '/colaboradores/$id', params: { id: e.id } })}
+                    >
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar name={e.socialName ?? e.fullName} />
+                          <div className="min-w-0">
+                            <Link
+                              to="/colaboradores/$id"
+                              params={{ id: e.id }}
+                              onClick={event => event.stopPropagation()}
+                              className="block truncate font-medium text-ink decoration-brand decoration-2 underline-offset-4 group-hover/row:underline"
+                            >
+                              {e.socialName ?? e.fullName}
+                            </Link>
+                            <div className="num text-[12.5px] text-steel">Matrícula {e.registration}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="text-ink-soft">{e.positionTitle ?? <span className="text-steel-soft">Sem cargo</span>}</div>
+                        <div className="text-[12.5px] text-steel">{e.departmentName ?? 'Sem departamento'}</div>
+                      </td>
+                      <td className="px-5 py-3 text-ink-soft">{e.managerName ?? <span className="text-steel-soft">Não definido</span>}</td>
+                      <td className="num px-5 py-3 text-ink-soft">
+                        {formatDate(e.hireDate)}
+                        <div className="text-[12.5px] text-steel">{contractLabel(e.contractType)}</div>
+                      </td>
+                      <td className="px-5 py-3">
+                        <Badge tone={statusTone(e.status)}>{statusLabel(e.status)}</Badge>
+                      </td>
+                      <td className="pr-4">
+                        <ArrowUpRight className="size-4 text-steel-soft opacity-0 transition-all duration-300 group-hover/row:translate-x-0.5 group-hover/row:-translate-y-0.5 group-hover/row:text-ink group-hover/row:opacity-100" aria-hidden />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {data && data.total > 0 && (
+          <nav aria-label="Paginação" className="flex items-center justify-between gap-3 border-t border-line bg-sunken/50 px-5 py-2.5 text-[13px] text-steel">
+            <span className="num">
+              {formatNumber((page - 1) * PAGE_SIZE + 1)}–{formatNumber(Math.min(page * PAGE_SIZE, data.total))} de {formatNumber(data.total)}
+            </span>
+            {pages > 1 && (
+              <div className="flex items-center gap-1">
+                <Button size="icon" variant="ghost" disabled={page <= 1} onClick={() => setSearch({ page: page - 1 })} aria-label="Página anterior">
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <span className="num px-2">
+                  Página <span className="font-medium text-ink">{page}</span> de {pages}
+                </span>
+                <Button size="icon" variant="ghost" disabled={page >= pages} onClick={() => setSearch({ page: page + 1 })} aria-label="Próxima página">
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            )}
           </nav>
         )}
-      </div>
+      </TableFrame>
 
       {canImport && <ImportDrawer open={importing} onOpenChange={setImporting} />}
       <EmployeeForm
@@ -207,5 +240,16 @@ export function EmployeesPage() {
         onSaved={id => navigate({ to: '/colaboradores/$id', params: { id } })}
       />
     </>
+  )
+}
+
+function Chip({ children, onRemove }: { children: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft py-0.5 pr-1 pl-2.5 text-[12.5px] font-medium text-brand-ink ring-1 ring-brand-strong/30">
+      {children}
+      <button type="button" onClick={onRemove} className="rounded-full p-0.5 hover:bg-brand/30" aria-label={`Remover filtro ${children}`}>
+        <X className="size-3" />
+      </button>
+    </span>
   )
 }

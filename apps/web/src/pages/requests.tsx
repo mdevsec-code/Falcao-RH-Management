@@ -1,8 +1,6 @@
-import * as Tabs from '@radix-ui/react-tabs'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { CalendarPlus, Inbox, ListChecks } from 'lucide-react'
-import { motion } from 'motion/react'
 import { useState } from 'react'
 
 import { REQUEST_STATUS_LABELS, REQUEST_STATUSES, type RequestStatus } from '@falcao-rh/contracts'
@@ -10,19 +8,14 @@ import { REQUEST_STATUS_LABELS, REQUEST_STATUSES, type RequestStatus } from '@fa
 import { Button } from '../components/ui/button'
 import { DataTable, type Column } from '../components/ui/data-table'
 import { Select } from '../components/ui/field'
-import { ErrorState, PageHeader } from '../components/ui/layout'
+import { Avatar, ErrorState, PageHeader } from '../components/ui/layout'
+import { TabList, Tabs } from '../components/ui/tabs'
 import { NewRequestDrawer, periodLabel, RequestDrawer, requestLabel, RequestStatusBadge, TimelineCalendar } from '../features/requests'
 import { api } from '../lib/api'
 import { useCan, useMe } from '../lib/session'
 import type { RequestItem } from '../lib/types'
 
 type Tab = 'fila' | 'todas' | 'calendario'
-
-const TABS: [Tab, string][] = [
-  ['fila', 'Aguardando você'],
-  ['todas', 'Todas'],
-  ['calendario', 'Calendário'],
-]
 
 export function RequestsPage() {
   const me = useMe()
@@ -49,13 +42,16 @@ export function RequestsPage() {
     {
       label: 'Pessoa',
       render: r => (
-        <div>
-          <div className="font-medium text-ink">{r.employeeName}</div>
-          <div className="text-[13px] text-steel">{r.departmentName ?? 'Sem departamento'}</div>
+        <div className="flex items-center gap-3">
+          <Avatar name={r.employeeName} />
+          <div className="min-w-0">
+            <div className="truncate font-medium text-ink">{r.employeeName}</div>
+            <div className="truncate text-[12.5px] text-steel">{r.departmentName ?? 'Sem departamento'}</div>
+          </div>
         </div>
       ),
     },
-    { label: 'Tipo', render: r => requestLabel(r) },
+    { label: 'Tipo', render: r => <span className="text-ink-soft">{requestLabel(r)}</span> },
     { label: 'Período', render: r => <span className="num">{periodLabel(r)}</span> },
     { label: 'Situação', render: r => <RequestStatusBadge status={r.status} /> },
   ]
@@ -64,6 +60,7 @@ export function RequestsPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Aprovações"
         title="Solicitações"
         description={me.scope === 'team' ? 'Férias e ausências da sua equipe.' : 'Férias e ausências de toda a organização.'}
         actions={
@@ -76,21 +73,15 @@ export function RequestsPage() {
       />
 
       <Tabs.Root value={tab} onValueChange={value => go({ tab: value as Tab })}>
-        <Tabs.List aria-label="Visões" className="mb-5 flex gap-6 border-b border-line">
-          {TABS.map(([value, label]) => (
-            <Tabs.Trigger
-              key={value}
-              value={value}
-              className="relative pb-2.5 text-[15px] text-steel hover:text-ink data-[state=active]:font-medium data-[state=active]:text-ink"
-            >
-              {label}
-              {value === 'fila' && pending > 0 && (
-                <span className="num ml-2 rounded-full bg-brand px-1.5 py-px text-[12px] font-semibold text-ink">{pending}</span>
-              )}
-              {tab === value && <motion.span layoutId="requests-tab" className="absolute inset-x-0 -bottom-px h-0.5 bg-ink" />}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
+        <TabList
+          label="Visões"
+          value={tab}
+          items={[
+            { value: 'fila', label: 'Aguardando você', count: pending, highlight: true },
+            { value: 'todas', label: 'Todas' },
+            { value: 'calendario', label: 'Calendário' },
+          ]}
+        />
 
         <Tabs.Content value="fila">
           {queue.isError && <ErrorState error={queue.error} onRetry={() => queue.refetch()} />}

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { MailPlus } from 'lucide-react'
+import { Crown, MailPlus, UserRound, Users, UsersRound } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
@@ -8,11 +8,14 @@ import { ROLE_LABELS, ROLES, type Role } from '@falcao-rh/contracts'
 import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
 import { Field, Input, Select } from '../components/ui/field'
-import { Badge, ErrorState, PageHeader, Skeleton } from '../components/ui/layout'
+import { TableFrame, TableSkeleton, thClass, trClass } from '../components/ui/data-table'
+import { Avatar, Badge, ErrorState, PageHeader } from '../components/ui/layout'
 import { api, ApiError } from '../lib/api'
 import { formatDate } from '../lib/format'
 import { useMe } from '../lib/session'
 import type { EmployeeListItem, Member, Page } from '../lib/types'
+
+const ROLE_ICONS = { admin: Crown, hr: UsersRound, manager: Users, employee: UserRound } as const
 
 const ROLE_HINTS: Record<Role, string> = {
   admin: 'Tudo, inclusive usuários e configurações.',
@@ -44,6 +47,7 @@ export function AccessPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Administração"
         title="Usuários e acessos"
         description="Quem entra no sistema e o que cada perfil pode ver. Cada pessoa recebe um link para definir a própria senha."
         actions={
@@ -53,40 +57,61 @@ export function AccessPage() {
         }
       />
 
-      <dl className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {ROLES.map(role => (
-          <div key={role} className="rounded-md border border-line bg-paper px-4 py-3">
-            <dt className="font-medium text-ink">{ROLE_LABELS[role]}</dt>
-            <dd className="text-sm text-steel">{ROLE_HINTS[role]}</dd>
-          </div>
-        ))}
+      <dl className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {ROLES.map(role => {
+          const Icon = ROLE_ICONS[role]
+          const total = members.data?.filter(m => m.role === role).length
+          return (
+            <div key={role} data-reveal className="surface group relative overflow-hidden p-5 transition-shadow duration-300 hover:shadow-lift">
+              <div className="flex items-center justify-between">
+                <span className="flex size-9 items-center justify-center rounded-sm bg-night text-brand transition-transform duration-500 group-hover:-rotate-6">
+                  <Icon className="size-4" aria-hidden />
+                </span>
+                {total !== undefined && <span className="num font-display text-[32px] leading-none font-semibold text-ink">{total}</span>}
+              </div>
+              <dt className="mt-4 font-medium text-ink">{ROLE_LABELS[role]}</dt>
+              <dd className="mt-0.5 text-[13px] leading-snug text-steel">{ROLE_HINTS[role]}</dd>
+            </div>
+          )
+        })}
       </dl>
 
       {members.isError && <ErrorState error={members.error} onRetry={() => members.refetch()} />}
       {members.isPending ? (
-        <Skeleton className="h-64" />
+        <TableFrame>
+          <TableSkeleton />
+        </TableFrame>
       ) : (
-        <div className="overflow-x-auto rounded-md border border-line bg-paper">
+        <TableFrame>
+        <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] text-left text-sm">
-            <thead className="border-b border-line bg-concrete/60 text-[13px] text-steel">
+            <thead className="border-b border-line bg-sunken/70">
               <tr>
-                <th scope="col" className="px-5 py-2.5 font-medium">Pessoa</th>
-                <th scope="col" className="px-3 py-2.5 font-medium">Perfil</th>
-                <th scope="col" className="px-3 py-2.5 font-medium">Ficha de colaborador</th>
-                <th scope="col" className="px-3 py-2.5 font-medium">Desde</th>
-                <th scope="col" className="px-5 py-2.5 font-medium">Situação</th>
+                <th scope="col" className={thClass}>Pessoa</th>
+                <th scope="col" className={thClass}>Perfil</th>
+                <th scope="col" className={thClass}>Ficha de colaborador</th>
+                <th scope="col" className={thClass}>Desde</th>
+                <th scope="col" className={thClass}>Situação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
               {members.data?.map(m => {
                 const self = m.userId === me.user.id
                 return (
-                  <tr key={m.id}>
-                    <td className="px-5 py-2.5">
-                      <div className="font-medium text-ink">{m.name}{self && <span className="font-normal text-steel"> (você)</span>}</div>
-                      <div className="text-[13px] text-steel">{m.email}</div>
+                  <tr key={m.id} data-reveal-row className={trClass}>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar name={m.name} className={m.status === 'active' ? undefined : 'opacity-50'} />
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-ink">
+                            {m.name}
+                            {self && <span className="ml-1.5 rounded-full bg-brand-soft px-1.5 py-px text-[11px] font-medium text-brand-ink">você</span>}
+                          </div>
+                          <div className="truncate text-[12.5px] text-steel">{m.email}</div>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-5 py-3">
                       <Select
                         aria-label={`Perfil de ${m.name}`}
                         value={m.role}
@@ -97,7 +122,7 @@ export function AccessPage() {
                         {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                       </Select>
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-5 py-3">
                       <Select
                         aria-label={`Ficha de ${m.name}`}
                         value={m.employeeId ?? ''}
@@ -109,8 +134,8 @@ export function AccessPage() {
                         {people.data?.items.map(p => <option key={p.id} value={p.id}>{p.fullName}</option>)}
                       </Select>
                     </td>
-                    <td className="num px-3 py-2.5 text-steel">{formatDate(m.createdAt)}</td>
-                    <td className="px-5 py-2.5">
+                    <td className="num px-5 py-3 text-steel">{formatDate(m.createdAt)}</td>
+                    <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <Badge tone={m.status === 'active' ? 'ok' : 'neutral'}>{m.status === 'active' ? 'Ativo' : 'Desativado'}</Badge>
                         {!self && (
@@ -130,6 +155,7 @@ export function AccessPage() {
             </tbody>
           </table>
         </div>
+        </TableFrame>
       )}
 
       <InviteDrawer open={inviting} onOpenChange={setInviting} people={people.data?.items ?? []} />

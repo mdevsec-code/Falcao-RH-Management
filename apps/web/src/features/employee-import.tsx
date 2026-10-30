@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
+import { CheckCard } from '../components/ui/field'
 import { FileInput } from '../components/ui/file-input'
 import { Badge } from '../components/ui/layout'
 import { apiDownload, ApiError, apiUpload } from '../lib/api'
@@ -71,25 +72,19 @@ export function ImportDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
           <Download className="size-4" aria-hidden /> Baixar modelo (.xlsx)
         </Button>
         <FileInput file={file} onChange={reset} accept=".xlsx,.csv" hint="Planilha .xlsx ou .csv, até 10 MB." />
-        <label className="flex cursor-pointer items-start gap-3 rounded-sm border border-line px-3 py-2.5 text-sm hover:border-ink">
-          <input
-            type="checkbox"
-            checked={createMissing}
-            onChange={e => {
-              setCreateMissing(e.target.checked)
-              setReport(null)
-            }}
-            className="mt-0.5 size-4 accent-ink"
-          />
-          <span>
-            Criar departamentos, cargos e unidades que ainda não existem
-            <span className="block text-[13px] text-steel">Sem esta opção, nomes desconhecidos viram erro na linha.</span>
-          </span>
-        </label>
+        <CheckCard
+          checked={createMissing}
+          onChange={checked => {
+            setCreateMissing(checked)
+            setReport(null)
+          }}
+          label="Criar departamentos, cargos e unidades que ainda não existem"
+          description="Sem esta opção, nomes desconhecidos viram erro na linha."
+        />
 
         {report && (
           <section className="flex flex-col gap-3">
-            <div className="grid grid-cols-3 divide-x divide-line rounded-sm border border-line text-center">
+            <div className="grid grid-cols-3 divide-x divide-line overflow-hidden rounded-md border border-line bg-sunken/60 text-center">
               <Count label="Linhas" value={report.total} />
               <Count label="Prontas" value={report.valid} tone="ok" />
               <Count label="Com erro" value={report.invalid} tone={report.invalid ? 'danger' : undefined} />
@@ -99,7 +94,7 @@ export function ImportDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
                 Serão criados: <span className="font-medium">{missing.join(', ')}</span>.
               </p>
             )}
-            <ul className="max-h-80 divide-y divide-line overflow-y-auto rounded-sm border border-line">
+            <ul className="max-h-80 divide-y divide-line overflow-y-auto rounded-md border border-line">
               {report.rows.map(row => (
                 <li key={row.line} className="flex gap-3 px-3 py-2.5 text-sm">
                   {row.errors.length ? <CircleX className="mt-0.5 size-4 shrink-0 text-danger" aria-label="Com erro" /> : <CircleCheck className="mt-0.5 size-4 shrink-0 text-ok" aria-label="Pronta" />}
@@ -127,8 +122,8 @@ export function ImportDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
 function Count({ label, value, tone }: { label: string; value: number; tone?: 'ok' | 'danger' }) {
   return (
     <div className="px-3 py-3">
-      <p className={cn('num font-display text-3xl leading-none font-semibold', tone === 'ok' ? 'text-ok' : tone === 'danger' ? 'text-danger' : 'text-ink')}>{value}</p>
-      <p className="mt-1 text-[13px] text-steel">{label}</p>
+      <p className={cn('num font-display text-[34px] leading-none font-semibold', tone === 'ok' ? 'text-ok' : tone === 'danger' ? 'text-danger' : 'text-ink')}>{value}</p>
+      <p className="mt-1.5 text-[11.5px] tracking-wide text-steel uppercase">{label}</p>
     </div>
   )
 }

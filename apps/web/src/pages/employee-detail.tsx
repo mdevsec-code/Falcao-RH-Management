@@ -1,8 +1,6 @@
-import * as Tabs from '@radix-ui/react-tabs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
-import { ArrowLeft, Pencil, Upload, UserCog } from 'lucide-react'
-import { motion } from 'motion/react'
+import { ArrowLeft, ClipboardList, History, Info, Pencil, Upload, UserCog } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
@@ -12,6 +10,7 @@ import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
 import { Field, Input, Select, Textarea } from '../components/ui/field'
 import { ErrorState, Panel, Skeleton } from '../components/ui/layout'
+import { TabList, Tabs } from '../components/ui/tabs'
 import { EmployeeForm } from '../features/employee-form'
 import { DataTable } from '../components/ui/data-table'
 import { DocumentDrawer, DocumentTable, UploadDocumentDrawer } from '../features/documents'
@@ -62,14 +61,14 @@ export function EmployeeDetailPage() {
 
   return (
     <>
-      <Link to="/colaboradores" className="mb-4 inline-flex items-center gap-1.5 text-sm text-steel hover:text-ink">
-        <ArrowLeft className="size-4" aria-hidden /> Colaboradores
+      <Link to="/colaboradores" className="group mb-5 inline-flex items-center gap-1.5 text-[13.5px] text-steel transition-colors hover:text-ink">
+        <ArrowLeft className="size-4 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden /> Colaboradores
       </Link>
 
       {query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
       {query.isPending && (
-        <div className="flex flex-col gap-4">
-          <Skeleton className="h-20" />
+        <div className="flex flex-col gap-5">
+          <Skeleton className="h-60 rounded-xl" />
           <Skeleton className="h-72" />
         </div>
       )}
@@ -81,7 +80,7 @@ export function EmployeeDetailPage() {
             actions={
               <>
                 {canChangeStatus && (
-                  <Button onClick={() => setChangingStatus(true)}>
+                  <Button variant="glass" onClick={() => setChangingStatus(true)}>
                     <UserCog className="size-4" aria-hidden /> Alterar situação
                   </Button>
                 )}
@@ -95,24 +94,16 @@ export function EmployeeDetailPage() {
           />
 
           <Tabs.Root value={tab} onValueChange={setTab}>
-            <Tabs.List aria-label="Seções da ficha" className="mb-5 flex gap-6 overflow-x-auto border-b border-line">
-              {tabs.map(t => (
-                <Tabs.Trigger
-                  key={t.value}
-                  value={t.value}
-                  className="relative shrink-0 pb-2.5 text-[15px] text-steel hover:text-ink data-[state=active]:font-medium data-[state=active]:text-ink"
-                >
-                  {t.label}
-                  {t.value === 'historico' && <span className="num ml-1.5 text-steel">{employee.history.length}</span>}
-                  {tab === t.value && <motion.span layoutId="profile-tab" className="absolute inset-x-0 -bottom-px h-0.5 bg-ink" />}
-                </Tabs.Trigger>
-              ))}
-            </Tabs.List>
+            <TabList
+              label="Seções da ficha"
+              value={tab}
+              items={tabs.map(t => ({ value: t.value, label: t.label, count: t.value === 'historico' ? employee.history.length : undefined }))}
+            />
             <Tabs.Content value="dados">
               <ProfileDetails employee={employee} />
             </Tabs.Content>
             <Tabs.Content value="historico">
-              <Panel title="Histórico funcional">
+              <Panel title="Histórico funcional" icon={History}>
                 <ProfileHistory history={employee.history} />
               </Panel>
             </Tabs.Content>
@@ -120,8 +111,9 @@ export function EmployeeDetailPage() {
               <Tabs.Content value="ferias">
                 <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
                   <VacationBalanceCard balance={balance.data} />
-                  <Panel title="Solicitações" bodyClassName="p-0">
+                  <Panel title="Solicitações" icon={ClipboardList} bodyClassName="p-0">
                     <DataTable
+                      bare
                       loading={requests.isPending}
                       rows={requests.data ?? []}
                       onRowClick={r => setRequestId(r.id)}
@@ -232,7 +224,8 @@ function StatusDrawer({
           {p => <Textarea {...p} value={reason} onChange={e => setReason(e.target.value)} maxLength={500} />}
         </Field>
         {status === 'terminated' && (
-          <p className="rounded-sm border border-line bg-concrete p-3 text-sm text-ink-soft">
+          <p className="flex gap-2.5 rounded-md border border-info/20 bg-info-soft p-3.5 text-[13.5px] text-ink-soft">
+            <Info className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
             O desligamento aqui é o registro administrativo. Rescisão, verbas e eSocial seguem no sistema de folha.
           </p>
         )}

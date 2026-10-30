@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, Building, GitBranch, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
@@ -16,7 +16,7 @@ import {
 } from '@falcao-rh/contracts'
 
 import { Button } from '../components/ui/button'
-import { Field, Input, Select } from '../components/ui/field'
+import { CheckCard, Field, Input, Select } from '../components/ui/field'
 import { Badge, PageHeader, Panel, Skeleton } from '../components/ui/layout'
 import { api, ApiError } from '../lib/api'
 import { orgQueries } from '../lib/queries'
@@ -28,7 +28,7 @@ const DEFAULTS: Record<RequestType, ApproverKind[]> = { vacation: ['manager', 'h
 export function SettingsPage() {
   return (
     <>
-      <PageHeader title="Configurações" description="Dados da organização, regras de segurança e quem aprova cada tipo de solicitação." />
+      <PageHeader eyebrow="Administração" title="Configurações" description="Dados da organização, regras de segurança e quem aprova cada tipo de solicitação." />
       <div className="grid gap-6 xl:grid-cols-2">
         <OrganizationPanel />
         <FlowsPanel />
@@ -62,7 +62,7 @@ function OrganizationPanel() {
   }
 
   return (
-    <Panel title="Organização e segurança">
+    <Panel title="Organização e segurança" icon={Building}>
       <form onSubmit={submit} className="flex flex-col gap-5">
         <Field label="Nome exibido" required>{p => <Input {...p} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />}</Field>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -74,10 +74,7 @@ function OrganizationPanel() {
           <p className="mb-3 text-[13px] text-steel">Quem tem estes perfis só usa o sistema depois de ativar o aplicativo autenticador. Recomendado para Administrador e RH.</p>
           <div className="grid grid-cols-2 gap-2">
             {ROLES.map(role => (
-              <label key={role} className="flex cursor-pointer items-center gap-3 rounded-sm border border-line px-3 py-2.5 text-sm hover:border-ink">
-                <input type="checkbox" checked={form.requireMfaFor.includes(role)} onChange={() => toggleRole(role)} className="size-4 accent-ink" />
-                {ROLE_LABELS[role]}
-              </label>
+              <CheckCard key={role} checked={form.requireMfaFor.includes(role)} onChange={() => toggleRole(role)} label={ROLE_LABELS[role]} />
             ))}
           </div>
         </fieldset>
@@ -122,14 +119,14 @@ function FlowsPanel() {
   )
 
   return (
-    <Panel title="Fluxos de aprovação">
+    <Panel title="Fluxos de aprovação" icon={GitBranch}>
       <div className="flex flex-col gap-6">
-        <ul className="flex flex-col divide-y divide-line rounded-sm border border-line">
+        <ul className="flex flex-col divide-y divide-line overflow-hidden rounded-md border border-line">
           {REQUEST_TYPES.map(t => {
             const configured = flows.data?.filter(f => f.requestType === t) ?? []
             const general = configured.find(f => !f.departmentId)
             return (
-              <li key={t} className="px-4 py-3 text-sm">
+              <li key={t} className="px-4 py-3.5 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium text-ink">{REQUEST_TYPE_LABELS[t]}</span>
                   {chain(general?.steps ?? DEFAULTS[t])}
@@ -138,7 +135,7 @@ function FlowsPanel() {
                 {configured
                   .filter(f => f.departmentId)
                   .map(f => (
-                    <div key={f.id} className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-sm bg-concrete px-3 py-2">
+                    <div key={f.id} className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-sm bg-sunken px-3 py-2 ring-1 ring-line">
                       <span className="text-ink-soft">{f.departmentName}</span>
                       <span className="flex items-center gap-2">
                         {chain(f.steps)}
@@ -158,9 +155,9 @@ function FlowsPanel() {
             event.preventDefault()
             save.mutate()
           }}
-          className="flex flex-col gap-4 rounded-sm border border-dashed border-line-strong p-4"
+          className="flex flex-col gap-4 rounded-md border-[1.5px] border-dashed border-line-strong bg-sunken/50 p-5"
         >
-          <p className="text-sm font-medium text-ink">Definir fluxo</p>
+          <p className="eyebrow">Definir fluxo</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Tipo">
               {p => (
@@ -192,8 +189,9 @@ function FlowsPanel() {
               {steps.map((kind, i) => (
                 <span key={kind} className="flex items-center gap-2">
                   {i > 0 && <ArrowRight className="size-4 text-steel" aria-hidden />}
-                  <button type="button" onClick={() => setSteps(steps.filter(s => s !== kind))} className="rounded-sm bg-ink px-3 py-1.5 text-sm text-paper hover:bg-danger" title="Remover etapa">
+                  <button type="button" onClick={() => setSteps(steps.filter(s => s !== kind))} className="group inline-flex items-center gap-1.5 rounded-full bg-night py-1.5 pr-2 pl-3 text-[13px] font-medium text-snow transition-colors hover:bg-danger" title="Remover etapa">
                     {APPROVER_LABELS[kind]}
+                    <X className="size-3.5 text-fog group-hover:text-snow" aria-hidden />
                   </button>
                 </span>
               ))}

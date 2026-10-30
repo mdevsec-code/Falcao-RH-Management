@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { CalendarPlus, Palmtree } from 'lucide-react'
+import { CalendarPlus, ClipboardList, Palmtree } from 'lucide-react'
 import { useState } from 'react'
 
 import { Button } from '../components/ui/button'
@@ -18,6 +18,7 @@ export function MyRequestsPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Pessoal"
         title="Férias e ausências"
         description="Peça férias, avise uma ausência e acompanhe cada aprovação."
         actions={
@@ -26,11 +27,12 @@ export function MyRequestsPage() {
           </Button>
         }
       />
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <VacationBalanceCard balance={balance.data} />
-        <Panel title="Minhas solicitações" bodyClassName="p-0">
+        <Panel title="Minhas solicitações" icon={ClipboardList} bodyClassName="p-0">
           {list.isError && <ErrorState error={list.error} onRetry={() => list.refetch()} />}
           <DataTable
+            bare
             loading={list.isPending}
             rows={list.data ?? []}
             onRowClick={r => setOpenId(r.id)}

@@ -1,16 +1,15 @@
-import * as Tabs from '@radix-ui/react-tabs'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { FolderCog, Pencil, Plus, Trash2, Upload } from 'lucide-react'
-import { motion } from 'motion/react'
+import { FolderCog, Pencil, Plus, Search, TimerReset, Trash2, Upload } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '../components/ui/button'
 import { DataTable } from '../components/ui/data-table'
 import { Drawer } from '../components/ui/drawer'
-import { Field, Input, Select } from '../components/ui/field'
+import { CheckCard, Field, Input, Select } from '../components/ui/field'
 import { Badge, ErrorState, PageHeader } from '../components/ui/layout'
+import { TabList, Tabs } from '../components/ui/tabs'
 import { categoriesQuery, DocumentDrawer, DocumentTable, UploadDocumentDrawer } from '../features/documents'
 import { api, ApiError } from '../lib/api'
 import { useCan } from '../lib/session'
@@ -38,6 +37,7 @@ export function DocumentsPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Arquivo digital"
         title="Documentos"
         description="Arquivos de cada pessoa e da empresa, com validade, versões e registro de quem acessou."
         actions={
@@ -50,23 +50,21 @@ export function DocumentsPage() {
       />
 
       <Tabs.Root value={tab} onValueChange={value => setTab(value as 'docs' | 'cats')}>
-        <Tabs.List aria-label="Seções" className="mb-5 flex gap-6 border-b border-line">
-          {(
-            [
-              ['docs', 'Documentos'],
-              ['cats', 'Categorias'],
-            ] as const
-          ).map(([value, label]) => (
-            <Tabs.Trigger key={value} value={value} className="relative pb-2.5 text-[15px] text-steel hover:text-ink data-[state=active]:font-medium data-[state=active]:text-ink">
-              {label}
-              {tab === value && <motion.span layoutId="documents-tab" className="absolute inset-x-0 -bottom-px h-0.5 bg-ink" />}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
+        <TabList
+          label="Seções"
+          value={tab}
+          items={[
+            { value: 'docs', label: 'Documentos', count: list.data?.length },
+            { value: 'cats', label: 'Categorias', count: categories.data?.length },
+          ]}
+        />
 
         <Tabs.Content value="docs">
           <div className="mb-4 flex flex-wrap gap-2">
-            <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar pelo título" aria-label="Buscar" className="max-w-xs" />
+            <label className="relative min-w-56 flex-1 sm:max-w-xs">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-steel" aria-hidden />
+              <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar pelo título" aria-label="Buscar" className="pl-9" />
+            </label>
             <Select aria-label="Categoria" value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-auto">
               <option value="">Todas as categorias</option>
               {categories.data?.map(c => (
@@ -76,7 +74,7 @@ export function DocumentsPage() {
               ))}
             </Select>
             <Button variant={expiring ? 'primary' : 'secondary'} onClick={() => setSearch({ expiring: expiring ? undefined : 1 })} aria-pressed={expiring}>
-              Vencidos ou vencendo em 30 dias
+              <TimerReset className="size-4" aria-hidden /> Vencidos ou vencendo em 30 dias
             </Button>
           </div>
           {list.isError && <ErrorState error={list.error} onRetry={() => list.refetch()} />}
@@ -154,7 +152,17 @@ function CategoriesTab({ categories, loading, canManage }: { categories: Documen
         empty="Nenhuma categoria"
         emptyIcon={FolderCog}
         columns={[
-          { label: 'Categoria', render: c => <span className="font-medium text-ink">{c.name}</span> },
+          {
+            label: 'Categoria',
+            render: c => (
+              <span className="flex items-center gap-3">
+                <span className="flex size-9 items-center justify-center rounded-sm bg-sunken text-steel ring-1 ring-line">
+                  <FolderCog className="size-4" aria-hidden />
+                </span>
+                <span className="font-medium text-ink">{c.name}</span>
+              </span>
+            ),
+          },
           {
             label: 'Regras',
             render: c => (
@@ -198,12 +206,9 @@ function CategoriesTab({ categories, loading, canManage }: { categories: Documen
         <form onSubmit={submit} className="flex flex-col gap-5">
           <Field label="Nome" required>{p => <Input {...p} value={name} onChange={e => setName(e.target.value)} />}</Field>
           <fieldset className="flex flex-col gap-3">
-            <legend className="mb-2 text-sm font-medium text-ink-soft">Regras</legend>
+            <legend className="mb-2 text-[13.5px] font-medium text-ink-soft">Regras</legend>
             {FLAGS.map(([key, label]) => (
-              <label key={key} className="flex cursor-pointer items-center gap-3 rounded-sm border border-line px-3 py-2.5 text-sm hover:border-ink">
-                <input type="checkbox" checked={flags[key]} onChange={e => setFlags({ ...flags, [key]: e.target.checked })} className="size-4 accent-ink" />
-                {label}
-              </label>
+              <CheckCard key={key} checked={flags[key]} onChange={checked => setFlags({ ...flags, [key]: checked })} label={label} />
             ))}
           </fieldset>
           <button type="submit" hidden />

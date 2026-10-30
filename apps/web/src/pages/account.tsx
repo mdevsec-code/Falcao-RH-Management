@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Laptop, ShieldCheck, ShieldOff, Smartphone } from 'lucide-react'
+import { KeyRound, Laptop, MonitorSmartphone, ShieldCheck, ShieldOff, Smartphone } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useEffect, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
@@ -21,7 +21,7 @@ const unwrap = async <T,>(promise: Promise<{ data: T | null; error: { status?: n
 export function AccountPage() {
   return (
     <>
-      <PageHeader title="Minha conta" description="Senha, verificação em duas etapas e os aparelhos conectados à sua conta." />
+      <PageHeader eyebrow="Pessoal" title="Minha conta" description="Senha, verificação em duas etapas e os aparelhos conectados à sua conta." />
       <div className="grid gap-5 xl:grid-cols-2">
         <TwoFactorPanel />
         <PasswordPanel />
@@ -88,12 +88,13 @@ function TwoFactorPanel() {
   return (
     <Panel
       title="Verificação em duas etapas"
+      icon={ShieldCheck}
       aside={enabled ? <Badge tone="ok">Ativa</Badge> : <Badge tone={me.mfaPending ? 'danger' : 'neutral'}>{me.mfaPending ? 'Obrigatória' : 'Desativada'}</Badge>}
-      className={me.mfaPending ? 'border-ink' : undefined}
+      className={me.mfaPending ? 'border-brand-strong ring-4 ring-brand/25' : undefined}
     >
       {enabled && !disabling && (
         <div className="flex flex-col gap-4">
-          <p className="flex items-start gap-3 text-sm text-ink-soft">
+          <p className="flex items-start gap-3 rounded-md border border-ok/20 bg-ok-soft p-4 text-sm text-ink-soft">
             <ShieldCheck className="mt-0.5 size-5 shrink-0 text-ok" aria-hidden />
             Ao entrar, além da senha, o sistema pede o código do seu aplicativo autenticador.
           </p>
@@ -142,11 +143,11 @@ function TwoFactorPanel() {
             <li>
               <p className="mb-2 font-medium text-ink">1. Escaneie o código com o aplicativo autenticador</p>
               <div className="flex flex-wrap items-start gap-4">
-                <img src={setup.qr} alt="QR code para configurar o aplicativo autenticador" className="size-[200px] rounded-sm border border-line" />
+                <img src={setup.qr} alt="QR code para configurar o aplicativo autenticador" className="size-[200px] rounded-md border border-line bg-white p-2 shadow-card" />
                 <details className="max-w-xs text-[13px] text-steel">
                   <summary className="cursor-pointer">Não consegue escanear?</summary>
                   <p className="mt-2">Digite esta chave no aplicativo:</p>
-                  <code className="mt-1 block break-all rounded-sm bg-concrete px-2 py-1 text-ink">
+                  <code className="mt-1 block break-all rounded-sm bg-sunken px-2 py-1 text-ink ring-1 ring-line">
                     {new URL(setup.uri).searchParams.get('secret')}
                   </code>
                 </details>
@@ -155,7 +156,7 @@ function TwoFactorPanel() {
             <li>
               <p className="mb-2 font-medium text-ink">2. Guarde os códigos de recuperação</p>
               <p className="mb-2 text-[13px] text-steel">Cada um vale uma vez, se você perder o celular. Guarde num lugar seguro.</p>
-              <ul className="num grid grid-cols-2 gap-1 rounded-sm bg-concrete p-3 font-mono text-[13px] text-ink sm:grid-cols-3">
+              <ul className="num grid grid-cols-2 gap-1.5 rounded-md bg-night p-4 font-mono text-[13px] text-brand sm:grid-cols-3">
                 {setup.backupCodes.map(c => <li key={c}>{c}</li>)}
               </ul>
             </li>
@@ -199,7 +200,7 @@ function PasswordPanel() {
   })
   const valid = current && next.length >= 10 && next === confirm
   return (
-    <Panel title="Trocar senha">
+    <Panel title="Trocar senha" icon={KeyRound}>
       <form
         onSubmit={event => {
           event.preventDefault()
@@ -260,6 +261,7 @@ function SessionsPanel() {
   return (
     <Panel
       title="Aparelhos conectados"
+      icon={MonitorSmartphone}
       aside={list.length > 1 && <Button size="sm" onClick={() => revokeOthers.mutate()} loading={revokeOthers.isPending}>Sair dos outros</Button>}
       className="xl:col-span-2"
       bodyClassName="p-0"
@@ -273,10 +275,12 @@ function SessionsPanel() {
             const isCurrent = item.token === currentToken
             const Icon = device.mobile ? Smartphone : Laptop
             return (
-              <li key={item.id} className="flex items-center gap-4 px-5 py-3">
-                <Icon className="size-5 text-steel" aria-hidden />
+              <li key={item.id} className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-sunken">
+                <span className={isCurrent ? 'flex size-10 items-center justify-center rounded-sm bg-night text-brand' : 'flex size-10 items-center justify-center rounded-sm bg-sunken text-steel ring-1 ring-line'}>
+                  <Icon className="size-[18px]" aria-hidden />
+                </span>
                 <div className="min-w-0 flex-1 text-sm">
-                  <p className="text-ink">
+                  <p className="flex flex-wrap items-center gap-2 font-medium text-ink">
                     {device.label} {isCurrent && <Badge tone="ok">Este aparelho</Badge>}
                   </p>
                   <p className="text-[13px] text-steel">
