@@ -47,7 +47,7 @@ jobs:
       AUTH_SECRET: segredo-de-ci-apenas-para-testes-automatizados
       WEB_ORIGIN: http://localhost:5173
       API_URL: http://localhost:5173
-      STORAGE_DIR: ${{ runner.temp }}/storage
+      STORAGE_DIR: /tmp/falcao-rh-storage
       SEED_ADMIN_EMAIL: admin@demo.falcao.invalid
       SEED_ADMIN_PASSWORD: senha-de-ci-demo-2026
       E2E_PASSWORD: senha-de-ci-demo-2026
