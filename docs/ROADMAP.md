@@ -22,7 +22,7 @@ Monorepo, design system, banco com RLS, autenticação, multi-tenancy, perfis e 
 | Paleta de comandos (Ctrl+K), sistema de movimento, nova identidade visual | Entregue |
 | CI no GitHub Actions | Entregue |
 
-Verificação: 97 testes de unidade e integração (PostgreSQL real em memória, com RLS) e 15 testes ponta a ponta em três perfis.
+Verificação: 102 testes de unidade e integração (PostgreSQL real em memória, com RLS) e 15 testes ponta a ponta em três perfis.
 
 ### Pendências conhecidas da Fase 5
 

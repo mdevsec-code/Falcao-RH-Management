@@ -14,7 +14,7 @@
   <img alt="Node 24" src="https://img.shields.io/badge/node-24-339933?style=flat-square&logo=nodedotjs&logoColor=white">
   <img alt="TypeScript estrito" src="https://img.shields.io/badge/TypeScript-estrito-3178C6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="PostgreSQL 17 com RLS" src="https://img.shields.io/badge/PostgreSQL_17-RLS-4169E1?style=flat-square&logo=postgresql&logoColor=white">
-  <img alt="Testes" src="https://img.shields.io/badge/testes-97_integração_+_15_E2E-1F7A4D?style=flat-square">
+  <img alt="Testes" src="https://img.shields.io/badge/testes-102_unidade_e_integração_+_15_E2E-1F7A4D?style=flat-square">
 </p>
 
 ---
@@ -149,7 +149,7 @@ Sem `SMTP_URL`, os e-mails (convites, avisos) aparecem no log da API. O seed rec
 
 ```bash
 npm run typecheck
-npm test                      # 97 testes: contratos, regras da CLT, API e banco com RLS
+npm test                      # 102 testes: contratos, regras da CLT, interface, API e banco com RLS
 npm run build
 npm run test:e2e              # 15 testes no navegador; exige o ambiente DEMO rodando e E2E_PASSWORD
 ```
