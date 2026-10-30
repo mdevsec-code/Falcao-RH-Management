@@ -113,7 +113,7 @@ export const applicationForm = z.object({
   cpf: optionalString
     .refine(v => v === undefined || isValidCpf(v), 'CPF inválido')
     .transform(v => (v === undefined ? undefined : onlyDigits(v))),
-  linkedin: optionalString.refine(v => v === undefined || z.url().safeParse(v).success, 'Informe um link válido.'),
+  linkedin: optionalString.refine(v => v === undefined || z.url({ protocol: /^https?$/ }).safeParse(v).success, 'Informe um link válido.'),
   /** Respostas às perguntas da vaga, por id da pergunta. */
   answers: z.record(z.string(), z.string().trim().max(2000)).default({}),
   privacyConsent: z.literal(true, { error: 'É necessário aceitar a política de privacidade.' }),

@@ -102,6 +102,10 @@ describe('Recrutamento', () => {
     expect(applicationForm.safeParse({ ...validApplication, cpf: '111.111.111-11' }).success).toBe(false)
     expect(applicationForm.safeParse({ ...validApplication, cpf: '529.982.247-25' }).success).toBe(true)
   })
+  it('applicationForm só aceita linkedin http/https', () => {
+    expect(applicationForm.safeParse({ ...validApplication, linkedin: 'javascript:alert(1)' }).success).toBe(false)
+    expect(applicationForm.safeParse({ ...validApplication, linkedin: 'https://www.linkedin.com/in/x' }).success).toBe(true)
+  })
 
   const validJob = {
     title: 'Pedreiro',
