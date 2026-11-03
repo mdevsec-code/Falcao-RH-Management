@@ -1,15 +1,14 @@
-import type { MultipartFile } from '@fastify/multipart'
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
-import type { FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
 import { documentCategoryInput, documentFilters, documentMetadata, uuid } from '@falcao-rh/contracts'
 
 import type { AppDeps } from '../../app'
 import { ctxOf, requirePermission, TENANT_HEADER, tenantTx } from '../../http/context'
-import { AppError, badRequest, notFound } from '../../lib/errors'
+import { badRequest, notFound } from '../../lib/errors'
 import { Outbox } from '../../lib/notify'
 import { LocalStorage } from '../../lib/storage'
+import { readUpload } from '../../lib/upload'
 import {
   addVersion,
   createDocument,
@@ -21,32 +20,9 @@ import {
   myDocuments,
   saveCategory,
   updateDocument,
-  type UploadedFile,
 } from './documents.service'
 
 const idParams = z.object({ id: uuid })
-
-/** Lê um envio multipart: campos de texto primeiro, depois o arquivo. */
-const readUpload = async (request: FastifyRequest) => {
-  let part: MultipartFile | undefined
-  try {
-    part = await request.file()
-  } catch {
-    throw badRequest('Envie o arquivo como formulário (multipart/form-data).')
-  }
-  if (!part) throw badRequest('Nenhum arquivo enviado.')
-  let buffer: Buffer
-  try {
-    buffer = await part.toBuffer()
-  } catch {
-    throw new AppError(413, 'file_too_large', 'O arquivo passa de 10 MB.')
-  }
-  const fields: Record<string, string> = {}
-  for (const [name, field] of Object.entries(part.fields))
-    if (field && !Array.isArray(field) && field.type === 'field') fields[name] = String(field.value)
-  const file: UploadedFile = { buffer, filename: part.filename }
-  return { file, fields }
-}
 
 const metadataFrom = (fields: Record<string, string>) => {
   const parsed = documentMetadata.safeParse({

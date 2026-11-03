@@ -24,6 +24,7 @@ import { documentRoutes } from './modules/documents/documents.routes'
 import { employeeRoutes } from './modules/employees/employees.routes'
 import { notificationRoutes } from './modules/notifications/notifications.routes'
 import { orgRoutes } from './modules/org/org.routes'
+import { publicRecruitmentRoutes } from './modules/recruitment/public.routes'
 import { recruitmentStageRoutes } from './modules/recruitment/stages.routes'
 import { requestRoutes } from './modules/requests/requests.routes'
 import { settingsRoutes } from './modules/settings/settings.routes'
@@ -109,6 +110,9 @@ export const buildApp = async (deps: AppDeps, options: FastifyServerOptions = {}
       return reply.send(response.body ? await response.text() : null)
     },
   })
+
+  // Página pública de vagas: sem sessão; a organização vem do endereço.
+  await app.register(publicRecruitmentRoutes(deps), { prefix: '/api/public/v1' })
 
   // API de domínio: toda rota exige sessão e organização.
   await app.register(

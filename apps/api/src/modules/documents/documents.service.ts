@@ -21,7 +21,8 @@ import { safeFilename, sniffMimeType } from '../../lib/file-type'
 import { notify, userOfEmployee, usersWithRoles, type Outbox } from '../../lib/notify'
 import type { Storage } from '../../lib/storage'
 
-export type UploadedFile = { buffer: Buffer; filename: string }
+import type { UploadedFile } from '../../lib/upload'
+export type { UploadedFile }
 
 // ---------- categorias ----------
 

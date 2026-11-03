@@ -57,6 +57,13 @@
       "when": 1793709711396,
       "tag": "0007_recruitment_stages_security",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793714346429,
+      "tag": "0008_application_notification",
+      "breakpoints": true
     }
   ]
 }

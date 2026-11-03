@@ -14,7 +14,7 @@ import type { Mailer } from '../lib/mailer'
 import { notify, Outbox, userOfEmployee, usersWithRoles } from '../lib/notify'
 import { vacationsDue } from '../modules/requests/vacation-due'
 
-const SYSTEM_USER = 'system'
+export const SYSTEM_USER = 'system'
 
 /** Registra a marca; devolve `false` se o aviso já tinha sido dado. */
 const firstTime = async (tx: Tx, tenantId: string, kind: string, ref: string, bucket: string) => {

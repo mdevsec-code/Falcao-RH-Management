@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core'
 import pg from 'pg'
 
+import { rowsOf } from './rows'
 import * as schema from './schema'
 
 export type Database = PgDatabase<PgQueryResultHKT, typeof schema>
@@ -28,6 +29,23 @@ export const withTenant = <T>(db: Database, ctx: TenantContext, fn: (tx: Tx) => 
     )
     await tx.execute(sql`set local role falcao_app`)
     return fn(tx)
+  })
+
+export type PublicTenant = { id: string; name: string }
+
+/**
+ * Transação das rotas públicas (página de vagas): a organização vem do slug
+ * do endereço, nunca de um id enviado pelo cliente, e a role `falcao_public`
+ * só lê vagas publicadas e só insere candidaturas. `null` se o slug não existe.
+ */
+export const withPublic = <T>(db: Database, slug: string, fn: (tx: Tx, tenant: PublicTenant) => Promise<T>) =>
+  db.transaction(async tx => {
+    await tx.execute(sql`set local role falcao_public`)
+    const result = await tx.execute(sql`select id, name from public_tenant(${slug})`)
+    const [tenant] = rowsOf<PublicTenant>(result)
+    if (!tenant) return null
+    await tx.execute(sql`select set_config('app.tenant_id', ${tenant.id}, true)`)
+    return fn(tx, tenant)
   })
 
 /** Como `withTenant`, sem organização: só enxerga os vínculos do próprio usuário. */
