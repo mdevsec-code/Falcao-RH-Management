@@ -5,7 +5,7 @@ import type { AppDeps } from '../../app'
 import { AppError } from '../../lib/errors'
 import { verifyTurnstile } from '../../lib/turnstile'
 import { readUpload } from '../../lib/upload'
-import { getPublicJob, listPublicJobs, submitApplication } from './public.service'
+import { eraseByToken, getPublicJob, listPublicJobs, renewByToken, submitApplication } from './public.service'
 
 const slugParams = z.object({ slug: z.string().min(1).max(80) })
 const jobParams = slugParams.extend({ token: z.string().min(16).max(200) })
@@ -39,5 +39,20 @@ export const publicRecruitmentRoutes =
         file,
       )
       return reply.status(201).send({ ok: true })
+    })
+
+    // Link do e-mail do candidato. Sempre a mesma resposta: não revela se o
+    // token existia nem se já foi usado.
+    const privacyParams = z.object({ token: z.string().min(1).max(200) })
+    const privacyDeps = (ip: string, log: (error: unknown) => void) => ({ db, storage, ip, log })
+
+    app.post('/privacy/:token/erase', { config: writes, schema: { params: privacyParams } }, async request => {
+      await eraseByToken(privacyDeps(request.ip, error => request.log.error(error, 'exclusão: falha ao remover arquivo')), request.params.token)
+      return { ok: true }
+    })
+
+    app.post('/privacy/:token/renew', { config: writes, schema: { params: privacyParams } }, async request => {
+      await renewByToken(privacyDeps(request.ip, error => request.log.error(error)), request.params.token)
+      return { ok: true }
     })
   }

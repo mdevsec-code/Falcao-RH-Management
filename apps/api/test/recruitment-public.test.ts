@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { applicationEvents, applications, candidateFiles, candidates, departments, jobOpenings, jobQuestions, notifications } from '../src/db/schema'
+import { applicationAnswers, applicationEvents, applications, auditLogs, candidateFiles, candidates, departments, jobOpenings, jobQuestions, notifications } from '../src/db/schema'
 import { createTestApp, type TestApp } from './harness'
 
 let t: TestApp
@@ -205,5 +205,54 @@ describe('candidatura pública', () => {
   it('não aceita candidatura em vaga de outra empresa pelo endereço desta', async () => {
     const response = await apply('vagas', jobs.foreign!.token, validForm({ email: 'cruzada@exemplo.com', answers: '{}' }))
     expect(response.statusCode).toBe(404)
+  })
+})
+
+describe('privacidade do candidato', () => {
+  const privacy = (token: string, action: 'erase' | 'renew') =>
+    t.app.inject({ method: 'POST', url: `/api/public/v1/privacy/${token}/${action}` })
+
+  it('exclusão a pedido apaga ficha, candidaturas, respostas e o arquivo, e audita sem dados pessoais', async () => {
+    expect((await apply('vagas', jobs.main!.token, validForm({ email: 'apagar@exemplo.com' }))).statusCode).toBe(201)
+    const [application] = await t.db.select().from(applications).where(eq(applications.email, 'apagar@exemplo.com'))
+    const [file] = await t.db.select().from(candidateFiles).where(eq(candidateFiles.applicationId, application!.id))
+
+    const response = await privacy(application!.privacyToken, 'erase')
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({ ok: true })
+
+    expect(await t.db.select().from(candidates).where(eq(candidates.id, application!.candidateId))).toHaveLength(0)
+    expect(await t.db.select().from(applications).where(eq(applications.id, application!.id))).toHaveLength(0)
+    expect(await t.db.select().from(applicationAnswers).where(eq(applicationAnswers.applicationId, application!.id))).toHaveLength(0)
+    await expect(t.storage.read(file!.storageKey)).rejects.toThrow()
+
+    const [log] = await t.db.select().from(auditLogs).where(eq(auditLogs.action, 'candidate.erased_by_request'))
+    expect(log).toMatchObject({ tenantId: org.tenant.id, entityId: application!.candidateId })
+    expect(JSON.stringify(log)).not.toContain('apagar@exemplo.com')
+  })
+
+  it('token já usado ou inventado recebe a mesma resposta, sem revelar nada', async () => {
+    const used = await privacy('token-que-nao-existe-mais-aaaaaaaa', 'erase')
+    const invented = await privacy(randomBytes(32).toString('base64url'), 'erase')
+    expect(used.statusCode).toBe(200)
+    expect(invented.statusCode).toBe(200)
+    expect(used.body).toBe(invented.body)
+    expect((await privacy(randomBytes(32).toString('base64url'), 'renew')).body).toBe(invented.body)
+  })
+
+  it('renovação atualiza o consentimento e o prazo só onde havia consentimento', async () => {
+    const [withConsent] = await t.db.select().from(applications).where(eq(applications.email, 'maria.silva@exemplo.com'))
+    const old = new Date('2025-01-01T12:00:00Z')
+    await t.db.update(applications).set({ consentAt: old, retentionUntil: '2027-01-01' }).where(eq(applications.id, withConsent!.id))
+
+    expect((await privacy(withConsent!.privacyToken, 'renew')).statusCode).toBe(200)
+    const [renewed] = await t.db.select().from(applications).where(eq(applications.id, withConsent!.id))
+    expect(renewed!.consentAt!.getTime()).toBeGreaterThan(old.getTime())
+    expect(renewed!.retentionUntil! > '2027-01-01').toBe(true)
+
+    const [without] = await t.db.select().from(applications).where(eq(applications.email, 'sem.consentimento@exemplo.com'))
+    await privacy(without!.privacyToken, 'renew')
+    const [unchanged] = await t.db.select().from(applications).where(eq(applications.id, without!.id))
+    expect(unchanged).toMatchObject({ talentPoolConsent: false, consentAt: null, retentionUntil: null })
   })
 })

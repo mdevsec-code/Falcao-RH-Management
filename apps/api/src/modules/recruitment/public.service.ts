@@ -15,6 +15,7 @@ import { rowsOf } from '../../db/rows'
 import {
   applicationAnswers,
   applicationEvents,
+  auditLogs,
   applications,
   candidateFiles,
   candidates,
@@ -268,4 +269,57 @@ export const submitApplication = async (deps: ApplyDeps, slug: string, token: st
   } catch (error) {
     deps.log(error)
   }
+}
+
+// ---------- privacidade do candidato (link do e-mail) ----------
+
+/** Candidatura do token, lida como operação de sistema (dono do banco). */
+const byPrivacyToken = async (tx: Tx, token: string) =>
+  (
+    await tx
+      .select({ tenantId: applications.tenantId, candidateId: applications.candidateId })
+      .from(applications)
+      .where(eq(applications.privacyToken, token))
+  )[0]
+
+export type PrivacyDeps = { db: Database; storage: Storage; ip: string; log: (error: unknown) => void }
+
+/**
+ * Exclusão a pedido do candidato: apaga a ficha e tudo o que vem dela.
+ * Token inexistente ou já usado não faz nada e não é revelado.
+ */
+export const eraseByToken = async (deps: PrivacyDeps, token: string) => {
+  const keys = await deps.db.transaction(async tx => {
+    const found = await byPrivacyToken(tx, token)
+    if (!found) return []
+    const [row] = rowsOf<{ keys: string[] }>(await tx.execute(sql`select public_erase_by_token(${token}) as keys`))
+    await tx.insert(auditLogs).values({
+      tenantId: found.tenantId,
+      actorUserId: null,
+      action: 'candidate.erased_by_request',
+      entity: 'candidate',
+      entityId: found.candidateId,
+      ip: deps.ip,
+    })
+    return row?.keys ?? []
+  })
+  // Arquivos só saem depois do commit; falha aqui deixa um órfão no
+  // armazenamento, nunca um registro apontando para arquivo apagado.
+  for (const key of keys) await deps.storage.remove(key).catch(deps.log)
+}
+
+/** Renova o consentimento ao banco de talentos (só onde já havia) e o prazo. */
+export const renewByToken = async (deps: PrivacyDeps, token: string) => {
+  await deps.db.transaction(async tx => {
+    const found = await byPrivacyToken(tx, token)
+    if (!found) return
+    const [tenant] = await tx.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, found.tenantId))
+    const months = (tenant?.settings as TenantSettings | undefined)?.recruitment?.talentPoolMonths ?? RECRUITMENT_DEFAULTS.talentPoolMonths
+    const [row] = rowsOf<{ renewed: boolean }>(await tx.execute(sql`select public_renew_consent(${token}) as renewed`))
+    if (!row?.renewed) return
+    await tx
+      .update(applications)
+      .set({ retentionUntil: addMonths(months) })
+      .where(and(eq(applications.candidateId, found.candidateId), eq(applications.talentPoolConsent, true)))
+  })
 }
