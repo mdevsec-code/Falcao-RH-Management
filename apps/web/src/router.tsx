@@ -15,6 +15,24 @@ const rootRoute = createRootRoute({ component: Outlet })
 
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/entrar', component: LoginPage })
 
+// Página pública de vagas: fora da área autenticada e em pacote próprio (não
+// baixa nada do sistema interno).
+const careersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vagas/$empresa',
+  component: lazyRouteComponent(() => import('./public/careers'), 'CareersPage'),
+})
+const publicJobRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vagas/$empresa/$token',
+  component: lazyRouteComponent(() => import('./public/job-page'), 'JobPage'),
+})
+const candidatePrivacyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/vagas/privacidade/$token',
+  component: lazyRouteComponent(() => import('./public/privacy'), 'PrivacyPage'),
+})
+
 export const setPasswordRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/definir-senha',
@@ -148,6 +166,9 @@ const accessRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  careersRoute,
+  publicJobRoute,
+  candidatePrivacyRoute,
   setPasswordRoute,
   appRoute.addChildren([
     indexRoute,
