@@ -1,4 +1,5 @@
-import { sql } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
+import { sql, type SQL } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { withTenant } from '../src/db/client'
@@ -85,6 +86,107 @@ describe('isolamento no banco (RLS)', () => {
       )
     expect(await reason(t.db.update(auditLogs).set({ action: 'adulterado' }))).toMatch(/imutáveis/)
     expect(await reason(t.db.delete(auditLogs))).toMatch(/imutáveis/)
+  })
+})
+
+describe('isolamento das tabelas do recrutamento', () => {
+  // Uma linha da empresa B em cada tabela nova, gravada como dono.
+  const B = {
+    job: randomUUID(),
+    question: randomUUID(),
+    candidate: randomUUID(),
+    application: randomUUID(),
+  }
+
+  /** Linha nova de cada tabela, com o tenant e as referências da empresa B. */
+  const rowOfB: Record<string, () => SQL> = {
+    job_openings: () => sql`
+      insert into job_openings (tenant_id, title, contract_type, work_mode, description, status, share_token)
+      values (${b.tenant.id}, 'Vaga B', 'clt', 'site', 'Descrição longa o bastante.', 'published', ${randomUUID()})`,
+    job_questions: () => sql`
+      insert into job_questions (tenant_id, job_id, position, kind, label)
+      values (${b.tenant.id}, ${B.job}, ${Math.floor(Math.random() * 1e6) + 1}, 'text', 'Pergunta B')`,
+    candidates: () => sql`
+      insert into candidates (tenant_id, full_name, email, phone, city, state)
+      values (${b.tenant.id}, 'Candidata B', 'b@exemplo.com', '71999990000', 'Salvador', 'BA')`,
+    applications: () => sql`
+      insert into applications (tenant_id, job_id, candidate_id, email, privacy_token)
+      values (${b.tenant.id}, ${B.job}, ${B.candidate}, ${`${randomUUID()}@exemplo.com`}, ${randomUUID()})`,
+    application_answers: () => sql`
+      insert into application_answers (tenant_id, application_id, question_id, value)
+      values (${b.tenant.id}, ${B.application}, ${B.question}, 'Sim')`,
+    application_events: () => sql`
+      insert into application_events (tenant_id, application_id, from_stage, to_stage)
+      values (${b.tenant.id}, ${B.application}, null, 'new')`,
+    application_notes: () => sql`
+      insert into application_notes (tenant_id, application_id, body)
+      values (${b.tenant.id}, ${B.application}, 'Nota B')`,
+    candidate_files: () => sql`
+      insert into candidate_files (tenant_id, candidate_id, application_id, storage_key, filename, size_bytes)
+      values (${b.tenant.id}, ${B.candidate}, ${B.application}, ${randomUUID()}, 'cv.pdf', 10)`,
+  }
+  const tables = Object.keys(rowOfB)
+
+  const failure = (promise: Promise<unknown>) =>
+    promise.then(
+      () => 'aceito',
+      (error: { cause?: { message?: string } }) => error.cause?.message ?? '',
+    )
+
+  beforeAll(async () => {
+    await t.db.execute(sql`
+      insert into job_openings (id, tenant_id, title, contract_type, work_mode, description, status, share_token)
+      values (${B.job}, ${b.tenant.id}, 'Vaga B', 'clt', 'site', 'Descrição longa o bastante.', 'published', ${randomUUID()})`)
+    await t.db.execute(sql`
+      insert into job_questions (id, tenant_id, job_id, position, kind, label)
+      values (${B.question}, ${b.tenant.id}, ${B.job}, 0, 'text', 'Pergunta B')`)
+    await t.db.execute(sql`
+      insert into candidates (id, tenant_id, full_name, email, phone, city, state)
+      values (${B.candidate}, ${b.tenant.id}, 'Candidata B', 'b@exemplo.com', '71999990000', 'Salvador', 'BA')`)
+    await t.db.execute(sql`
+      insert into applications (id, tenant_id, job_id, candidate_id, email, privacy_token)
+      values (${B.application}, ${b.tenant.id}, ${B.job}, ${B.candidate}, 'b@exemplo.com', ${randomUUID()})`)
+    for (const table of ['application_answers', 'application_events', 'application_notes', 'candidate_files']) {
+      await t.db.execute(rowOfB[table]!())
+    }
+  })
+
+  it.each(tables)('a empresa A não lê %s da B', async table => {
+    const rows = await asA(async tx =>
+      rowsOf<{ total: number }>(await tx.execute(sql`select count(*)::int as total from ${sql.identifier(table)}`)),
+    )
+    expect(rows[0]!.total).toBe(0)
+    const [owner] = rowsOf<{ total: number }>(
+      await t.db.execute(sql`select count(*)::int as total from ${sql.identifier(table)}`),
+    )
+    expect(owner!.total).toBeGreaterThan(0)
+  })
+
+  it.each(tables)('a empresa A não grava em %s com o tenant da B', async table => {
+    expect(await failure(asA(tx => tx.execute(rowOfB[table]!())))).toMatch(/row-level security/)
+  })
+
+  it('a empresa A não altera nem apaga linhas do recrutamento da B', async () => {
+    const changed = await asA(async tx => [
+      ...rowsOf(await tx.execute(sql`update applications set stage = 'rejected' returning id`)),
+      ...rowsOf(await tx.execute(sql`delete from candidates returning id`)),
+    ])
+    expect(changed).toHaveLength(0)
+  })
+
+  it('a empresa A não candidata ninguém a uma vaga da B (chave composta)', async () => {
+    const candidate = randomUUID()
+    const result = await failure(
+      asA(async tx => {
+        await tx.execute(sql`
+          insert into candidates (id, tenant_id, full_name, email, phone, city, state)
+          values (${candidate}, ${a.tenant.id}, 'Candidata A', 'a@exemplo.com', '71999990000', 'Salvador', 'BA')`)
+        await tx.execute(sql`
+          insert into applications (tenant_id, job_id, candidate_id, email, privacy_token)
+          values (${a.tenant.id}, ${B.job}, ${candidate}, 'a@exemplo.com', ${randomUUID()})`)
+      }),
+    )
+    expect(result).toMatch(/applications_job_same_tenant_fk/)
   })
 })
 

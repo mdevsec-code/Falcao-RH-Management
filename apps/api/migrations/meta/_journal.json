@@ -29,6 +29,20 @@
       "when": 1793324796758,
       "tag": "0003_phase5_security",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793386466664,
+      "tag": "0004_recruitment",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793386483023,
+      "tag": "0005_recruitment_security",
+      "breakpoints": true
     }
   ]
 }
