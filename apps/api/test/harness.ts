@@ -14,6 +14,7 @@ import { addMember, createTenant, createUserWithPassword } from '../src/db/provi
 import * as schema from '../src/db/schema'
 import { loadEnv } from '../src/env'
 import { MemoryMailer } from '../src/lib/mailer'
+import { MemoryScanner } from '../src/lib/scanner'
 import { LocalStorage } from '../src/lib/storage'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -43,7 +44,8 @@ export const createTestApp = async () => {
   const mailer = new MemoryMailer()
   const auth = createAuth({ db, env, mailer })
   const storage = new LocalStorage(await mkdtemp(join(tmpdir(), 'falcao-rh-')), env.AUTH_SECRET)
-  const app = await buildApp({ db, auth, env, mailer, storage })
+  const scanner = new MemoryScanner()
+  const app = await buildApp({ db, auth, env, mailer, storage, scanner })
 
   const login = async (email: string, password = PASSWORD) => {
     const response = await app.inject({
@@ -75,7 +77,7 @@ export const createTestApp = async () => {
     await client.close()
   }
 
-  return { app, db, auth, mailer, storage, env, login, seedTenant, close }
+  return { app, db, auth, mailer, storage, scanner, env, login, seedTenant, close }
 }
 
 export type TestApp = Awaited<ReturnType<typeof createTestApp>>

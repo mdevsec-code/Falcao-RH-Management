@@ -1,7 +1,7 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, resolve, sep } from 'node:path'
 
 import type { Env } from '../env'
@@ -18,6 +18,8 @@ export type DownloadTarget = { key: string; filename: string; mimeType: string; 
  */
 export interface Storage {
   put(key: string, body: Buffer, mimeType: string): Promise<void>
+  read(key: string): Promise<Buffer>
+  remove(key: string): Promise<void>
   downloadUrl(target: DownloadTarget): Promise<string>
 }
 
@@ -53,6 +55,10 @@ export class LocalStorage implements Storage {
 
   async read(key: string) {
     return readFile(this.pathOf(key))
+  }
+
+  async remove(key: string) {
+    await rm(this.pathOf(key), { force: true })
   }
 
   private sign(payload: string) {
@@ -105,6 +111,15 @@ export class S3Storage implements Storage {
         IfNoneMatch: '*',
       }),
     )
+  }
+
+  async read(key: string) {
+    const response = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }))
+    return Buffer.from(await response.Body!.transformToByteArray())
+  }
+
+  async remove(key: string) {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }))
   }
 
   async downloadUrl(target: DownloadTarget) {

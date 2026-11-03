@@ -63,3 +63,15 @@ describe('link de download do armazenamento local', () => {
     await expect(s.put('../fora.txt', Buffer.from('x'))).rejects.toThrow(/inválida/)
   })
 })
+
+describe('remoção no armazenamento local', () => {
+  const storage = async () => new LocalStorage(await mkdtemp(join(tmpdir(), 'falcao-rh-')), 'segredo-de-teste-com-32-caracteres!')
+
+  it('remove o arquivo e ignora chave inexistente', async () => {
+    const s = await storage()
+    await s.put('t/doc/v1', Buffer.from('x'))
+    await s.remove('t/doc/v1')
+    await expect(s.read('t/doc/v1')).rejects.toThrow()
+    await expect(s.remove('t/doc/v1')).resolves.toBeUndefined()
+  })
+})

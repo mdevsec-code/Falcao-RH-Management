@@ -26,6 +26,15 @@ const schema = z.object({
   S3_REGION: z.string().default('sa-east-1'),
   /** Só para provedores compatíveis com S3 (MinIO, R2). Vazio na AWS. */
   S3_ENDPOINT: z.string().optional(),
+
+  /** Antivírus (clamd) para currículos enviados pelo site público. */
+  CLAMAV_HOST: z.string().default('127.0.0.1'),
+  CLAMAV_PORT: z.coerce.number().int().default(3310),
+
+  /** Captcha do formulário público de candidatura. Vazio: sem verificação. */
+  TURNSTILE_SECRET: z.string().optional(),
+  /** Origens que podem embutir o formulário público, separadas por vírgula. */
+  PUBLIC_EMBED_ORIGINS: z.string().optional(),
 })
   .refine(env => env.NODE_ENV !== 'production' || Boolean(env.SMTP_URL), {
     message: 'SMTP_URL é obrigatório em produção: sem ele ninguém recebe convites.',

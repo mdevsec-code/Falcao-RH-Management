@@ -3,6 +3,7 @@ import { createAuth } from './auth/auth'
 import { createDb } from './db/client'
 import { loadEnv } from './env'
 import { createMailer } from './lib/mailer'
+import { createScanner } from './lib/scanner'
 import { createStorage } from './lib/storage'
 
 const env = loadEnv()
@@ -11,10 +12,11 @@ const { db, close } = createDb(env.DATABASE_URL, env.DATABASE_POOL_MAX)
 // Sem SMTP_URL (só fora de produção), os e-mails aparecem no log.
 const mailer = createMailer(env, message => console.info(message))
 const storage = createStorage(env)
+const scanner = createScanner(env)
 
 const auth = createAuth({ db, env, mailer })
 const app = await buildApp(
-  { db, auth, env, mailer, storage },
+  { db, auth, env, mailer, storage, scanner },
   {
     logger: {
       level: env.LOG_LEVEL,

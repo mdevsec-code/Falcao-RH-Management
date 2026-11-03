@@ -30,7 +30,9 @@ import { settingsRoutes } from './modules/settings/settings.routes'
 import { transferRoutes } from './modules/employees/transfer.routes'
 import { userRoutes } from './modules/users/users.routes'
 
-export type AppDeps = { db: Database; auth: Auth; env: Env; mailer: Mailer; storage: Storage }
+import type { Scanner } from './lib/scanner'
+
+export type AppDeps = { db: Database; auth: Auth; env: Env; mailer: Mailer; storage: Storage; scanner: Scanner }
 
 export const buildApp = async (deps: AppDeps, options: FastifyServerOptions = {}) => {
   const { env, auth, db } = deps
