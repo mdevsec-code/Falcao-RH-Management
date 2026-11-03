@@ -16,11 +16,12 @@
 - Rotas públicas: prefixo `/api/public/v1`, fora do `authenticate`, sem cookies, role `falcao_public`; **nunca** leem candidatos, candidaturas, notas ou arquivos.
 - Organização resolvida pelo slug da URL (`/vagas/:empresa`), nunca por id enviado pelo cliente. Vaga acessada pelo `share_token` aleatório (32 bytes, base64url), nunca pelo UUID.
 - Currículo: só PDF (`sniffMimeType`), até `MAX_UPLOAD_BYTES` (10 MB), armazenamento privado. Estado `pending` → `clean` | `infected`; download interno **só** de `clean`; `infected` é removido do armazenamento.
-- Retenção (padrões editáveis em configurações): sem consentimento ao banco de talentos, 6 meses após o encerramento da vaga; com consentimento, 24 meses desde o consentimento ou a última renovação. Nada é apagado com processo em andamento (etapa ≠ `rejected`/`hired` e vaga ≠ `closed`).
+- Retenção (padrões editáveis em configurações): sem consentimento ao banco de talentos, 6 meses após o encerramento da vaga; com consentimento, 24 meses desde o consentimento ou a última renovação. Nada é apagado com processo em andamento (candidatura com `status = open` e vaga ≠ `closed`).
 - Junção de fichas nunca automática pelo formulário público; o RH confirma.
 - Contratação só pelo botão "Contratar" (endpoint dedicado). Arrastar para `hired` é recusado com 400.
 - Gestor (`manager`) vê só candidaturas das vagas em que é `manager_user_id`; sem CPF, sem outras candidaturas da pessoa, sem notas de outras vagas; sem banco de talentos.
-- Etapas e rótulos (pt-BR): `new` Novo, `screening` Triagem, `interview` Entrevista, `offer` Proposta, `hired` Contratado, `rejected` Recusado.
+- Etapas e rótulos (pt-BR): `new` Novo, `screening` Triagem, `interview` Entrevista, `offer` Proposta, `hired` Contratado, `rejected` Recusado. **Atualizado pela Task 2b (spec 5.8):** as etapas abertas passam a ser personalizáveis por organização (Novo fixo em primeiro); `hired`/`rejected` viram desfechos. Tasks 7, 8 e 12 usam o modelo da Task 2b.
+- Página oficial editável (spec 5.9): conteúdo em texto simples (sem HTML), rascunho separado do publicado, imagens PNG/JPEG/WebP até 5 MB servidas só se estiverem na versão publicada.
 - Interface: design system atual (tokens, tema claro/escuro, `Panel`, `DataTable`, `Drawer`, `TabList`, `RevealScope`); textos em pt-BR.
 - Trabalhar num branch novo (`feat/recrutamento`): o `main` local tem o rework visual ainda sem commit; não misturar.
 
@@ -106,6 +107,28 @@
 
 ---
 
+### Task 2b: Etapas personalizáveis
+
+**Files:**
+- Modify: `packages/contracts/src/recruitment.ts`, `packages/contracts/src/contracts.test.ts`, `apps/api/src/db/schema/recruitment.ts`
+- Create: migrações `0006_recruitment_stages.sql` (gerada) e `0007_recruitment_stages_security.sql` (manual); `apps/api/src/modules/recruitment/stages.routes.ts`, `stages.service.ts`
+- Modify: `apps/api/src/app.ts`, `apps/api/src/db/provision.ts` (etapas iniciais ao criar organização)
+- Test: `apps/api/test/recruitment-stages.test.ts`, `tenant-isolation.test.ts`
+
+**Interfaces:**
+- Consumes: Task 1 e Task 2.
+- Produces:
+  - Contratos: `APPLICATION_STATUSES = ['open','hired','rejected']` (rótulos: Em andamento, Contratado, Recusado); `DEFAULT_STAGES = ['Novo','Triagem','Entrevista','Proposta']`; `stagesInput`: `{ stages: { id?: uuid, name: 3–40 }[] }` (1–12 itens, nomes únicos sem diferenciar maiúsculas; o primeiro é sempre a etapa fixa e o seu nome é ignorado); `stageMove` passa a ser `{ stageId: uuid } | { outcome: 'rejected', reason: 3–300 }` (contratar continua só pelo endpoint de contratação). `APPLICATION_STAGES` e `OPEN_STAGES` deixam de existir; rótulos de etapa vêm do banco.
+  - Banco: tabela `recruitment_stages` (tenant_id, name, position int, is_initial bool; unique `(tenant_id, position)` deferrable e unique parcial de `is_initial`); `applications` ganha `status` (enum `open|hired|rejected`, default `open`) e `stage_id` (FK composta, `restrict`); a coluna `stage` antiga é removida. RLS/GRANTs em `recruitment_stages` para `falcao_app` (CRUD) e `falcao_public` (só `SELECT (id) WHERE is_initial`, para a candidatura nascer em Novo).
+  - Organização nova recebe as 4 etapas iniciais (`provision.ts`); a migração cria as 4 para organizações existentes.
+  - API: `GET /recruitment/stages` (`recruitment.read`) → `{ id, name, position, isInitial, openApplications }[]`; `PUT /recruitment/stages` (`settings.manage` ou `recruitment.manage`, body `stagesInput`) substitui a lista: renomeia, reordena, cria e remove; remover etapa com candidaturas `open` → 409 "Mova os candidatos antes de remover a etapa {nome}."; auditoria.
+
+- [ ] **Step 1: Write the failing tests:** organização nova tem as 4 etapas na ordem; `PUT` reordena e acrescenta "Exame admissional (ASO)"; nome duplicado → 400; renomear a inicial não muda o nome dela; remover etapa com candidatura aberta → 409; remover etapa vazia funciona; gestor → 403 no `PUT`; isolamento: empresa A não lê etapas da B; `falcao_public` não lê etapas além da inicial.
+- [ ] **Step 2:** → FAIL. **Step 3:** implementar. **Step 4:** → PASS; suíte inteira verde.
+- [ ] **Step 5: Commit** `feat: etapas do recrutamento personalizáveis por organização`
+
+---
+
 ### Task 3: Armazenamento (remoção) e antivírus
 
 **Files:**
@@ -149,7 +172,7 @@
     - `GET /api/public/v1/:slug/jobs/:token` → `PublicJob & { questions, accepting: boolean }` (`accepting = status==='published'`); 404 se não existe.
     - `POST /api/public/v1/:slug/jobs/:token/applications` (multipart: campos de `applicationForm` + `answers` como JSON + `file`; Turnstile `cf-turnstile-response` quando `TURNSTILE_SECRET` definido) → 201 `{ ok: true }`.
   - `PublicJob = { token, title, city, state, workMode, contractType, departmentName, salary: { min, max } | null, description, requirements, benefits, publishedAt }` (salário só se `showSalary`).
-  - Na candidatura: valida com `applicationForm`; `website` preenchido ou `Date.now() - startedAt < 3000` → responde 201 **sem gravar**; respostas obrigatórias faltando → 400; arquivo não-PDF → 400 "Envie o currículo em PDF."; duplicata (`public_application_exists`) → 409 "Você já se candidatou a esta vaga."; vaga não `published` → 409 "Esta vaga não está recebendo candidaturas.". Grava candidato, candidatura (`stage='new'`, `privacyToken` aleatório, `consentAt` se consentiu, `email` minúsculo), respostas, evento `null → new`, arquivo `scanStatus='pending'` (chave `recruitment/{tenantId}/{uuid}.pdf`). E-mail ao candidato (`mailer.send`): assunto "Recebemos sua candidatura: {título}", com link `${WEB_ORIGIN}/vagas/privacidade/{privacyToken}`. Notificação no sistema ao gestor da vaga e a usuários `hr`.
+  - Na candidatura: valida com `applicationForm`; `website` preenchido ou `Date.now() - startedAt < 3000` → responde 201 **sem gravar**; respostas obrigatórias faltando → 400; arquivo não-PDF → 400 "Envie o currículo em PDF."; duplicata (`public_application_exists`) → 409 "Você já se candidatou a esta vaga."; vaga não `published` → 409 "Esta vaga não está recebendo candidaturas.". Grava candidato, candidatura (`status='open'`, `stageId` = etapa inicial da organização, `privacyToken` aleatório, `consentAt` se consentiu, `email` minúsculo), respostas, evento de entrada na etapa inicial, arquivo `scanStatus='pending'` (chave `recruitment/{tenantId}/{uuid}.pdf`). E-mail ao candidato (`mailer.send`): assunto "Recebemos sua candidatura: {título}", com link `${WEB_ORIGIN}/vagas/privacidade/{privacyToken}`. Notificação no sistema ao gestor da vaga e a usuários `hr`.
 
 - [ ] **Step 1: Write the failing tests** (`recruitment-public.test.ts`; vagas criadas direto no banco como dono):
   - lista devolve a vaga pública publicada e **não** a não listada, a rascunho nem a da outra empresa;
@@ -216,14 +239,14 @@
 
 **Interfaces:**
 - Produces:
-  - `GET /jobs/:id/applications` (`recruitment.read` + escopo) → `BoardCard[] = { id, stage, candidate: { id, fullName, city, state }, rating, createdAt, fileStatus: 'pending'|'clean'|'infected'|null, tags }`.
+  - `GET /jobs/:id/applications` (`recruitment.read` + escopo) → `{ stages: { id, name, position }[], cards: BoardCard[], rejected: BoardCard[] }` com `BoardCard = { id, stageId, status, candidate: { id, fullName, city, state }, rating, createdAt, fileStatus: 'pending'|'clean'|'infected'|null, tags }`.
   - `GET /applications/:id` → `ApplicationDetail` com respostas (rótulo + valor), eventos, notas **desta** vaga, arquivo; para `hr`/`admin` inclui `candidate.cpf`, `candidate.email`, `candidate.phone` e `otherApplications: { id, jobTitle, stage, createdAt }[]`; para gestor omite `cpf` e `otherApplications` (e-mail e telefone visíveis, para contato).
-  - `POST /applications/:id/stage` (`stageMove`) → grava evento; `rejected` exige motivo, grava `rejectionReason`, envia e-mail "Sobre sua candidatura: {título}" com texto padrão das configurações; voltar de `rejected` para etapa aberta é permitido e limpa o motivo.
+  - `POST /applications/:id/stage` (`stageMove` da Task 2b) → `{ stageId }` move entre etapas da organização (etapa de outra organização → 404) e grava evento com os nomes das etapas; `{ outcome: "rejected", reason }` muda `status` para `rejected`, grava `rejectionReason`, envia e-mail "Sobre sua candidatura: {título}" com `recruitment.rejectionMessage`; mover uma recusada para uma etapa a reabre (`status = open`) e limpa o motivo; candidatura `hired` não se move (409).
   - `PATCH /applications/:id` `{ rating: 1..5 | null }`; `POST /applications/:id/notes` `{ body: 1..2000 }`.
   - `GET /candidate-files/:id/download` → `{ url }` (link temporário de `storage.downloadUrl`) só se `clean`; `pending` → 409 "O currículo ainda está em verificação de segurança."; `infected` → 410.
   - Gestor e RH podem mover etapas, avaliar e anotar nas vagas que enxergam.
 
-- [ ] **Step 1: Write the failing tests:** mover `new→screening→interview` gera 2 eventos com autor; `rejected` sem motivo → 400; com motivo envia e-mail; `stage: 'hired'` → 400; download `pending` → 409, após marcar `clean` direto no banco → 200 com `url`; **gestor abrindo candidatura de vaga de outro gestor → 404** (Review Focus 4); gestor não recebe `cpf` nem `otherApplications`; RH recebe.
+- [ ] **Step 1: Write the failing tests:** mover Novo→Triagem→Entrevista gera 2 eventos com autor; recusar sem motivo → 400; com motivo envia e-mail; mover recusada para Triagem a reabre; `stageId` de outra organização → 404; download `pending` → 409, após marcar `clean` direto no banco → 200 com `url`; **gestor abrindo candidatura de vaga de outro gestor → 404** (Review Focus 4); gestor não recebe `cpf` nem `otherApplications`; RH recebe.
 - [ ] **Step 2:** → FAIL. **Step 3:** implementar. **Step 4:** → PASS.
 - [ ] **Step 5: Commit** `feat(api): quadro de candidaturas, notas e currículo verificado`
 
@@ -237,10 +260,10 @@
 
 **Interfaces:**
 - Consumes: `createEmployee(tx, ctx, input: EmployeeInput)` de `employees.service.ts`.
-- Produces: `POST /applications/:id/hire` (`recruitment.manage` + `employees.create`; body `employeeInput`) → 201 `{ employeeId, suggestCloseJob: boolean }`. Em uma transação: exige etapa `offer` ou `interview` (senão 409 "Mova o candidato até Proposta antes de contratar."); cria o colaborador com evento `hired` motivo `Admissão via vaga {título}`; se o currículo estiver `clean`, cria documento do colaborador na categoria **"Currículo"** (criada se não existir: não sensível, visível ao colaborador, sem validade) reaproveitando a `storageKey`; incrementa `hiredCount`; `suggestCloseJob = hiredCount >= openings`; envia ao candidato o e-mail "Boas notícias sobre a vaga {título}" com `recruitment.hiredMessage`; apaga o candidato (cascata), **sem** remover o arquivo do armazenamento quando ele virou documento; auditoria `application.hired` com `employeeId` e `jobId`.
+- Produces: `POST /applications/:id/hire` (`recruitment.manage` + `employees.create`; body `employeeInput`) → 201 `{ employeeId, suggestCloseJob: boolean }`. Em uma transação: exige `status = open` e etapa diferente da inicial (senão 409 "Mova o candidato para além de Novo antes de contratar."); define `status = hired`; cria o colaborador com evento `hired` motivo `Admissão via vaga {título}`; se o currículo estiver `clean`, cria documento do colaborador na categoria **"Currículo"** (criada se não existir: não sensível, visível ao colaborador, sem validade) reaproveitando a `storageKey`; incrementa `hiredCount`; `suggestCloseJob = hiredCount >= openings`; envia ao candidato o e-mail "Boas notícias sobre a vaga {título}" com `recruitment.hiredMessage`; apaga o candidato (cascata), **sem** remover o arquivo do armazenamento quando ele virou documento; auditoria `application.hired` com `employeeId` e `jobId`.
 - Pré-preenchimento: a interface monta o `employeeInput` a partir do `ApplicationDetail` (nome, e-mail, telefone, CPF, cargo/departamento/unidade/contrato da vaga); a API não cria nada antes do envio.
 
-- [ ] **Step 1: Write the failing tests:** contratar da etapa `new` → 409; da `offer` com CPF válido → 201, colaborador existe com evento "Admissão via vaga …", documento "Currículo" existe e baixa, candidato não existe mais, `hiredCount` = 1, `suggestCloseJob` true quando `openings = 1`; CPF já cadastrado → 409 vindo do cadastro e **nada** muda na candidatura (transação).
+- [ ] **Step 1: Write the failing tests:** contratar em Novo → 409; em Proposta com CPF válido → 201, colaborador existe com evento "Admissão via vaga …", documento "Currículo" existe e baixa, candidato não existe mais, `hiredCount` = 1, `suggestCloseJob` true quando `openings = 1`; CPF já cadastrado → 409 vindo do cadastro e **nada** muda na candidatura (transação).
 - [ ] **Step 2:** → FAIL. **Step 3:** implementar. **Step 4:** → PASS.
 - [ ] **Step 5: Commit** `feat(api): contratação gera colaborador e leva o currículo`
 
@@ -267,6 +290,35 @@
 
 ---
 
+### Task 9b: Página oficial de vagas editável (API)
+
+**Files:**
+- Modify: `packages/contracts/src/recruitment.ts` (+ testes), `apps/api/src/db/schema/recruitment.ts`
+- Create: migrações `0008_career_page.sql` (gerada) e `0009_career_page_security.sql` (manual); `apps/api/src/modules/recruitment/career-page.routes.ts`, `career-page.service.ts`
+- Modify: `apps/api/src/modules/recruitment/public.routes.ts`, `public.service.ts`
+- Test: `apps/api/test/recruitment-career-page.test.ts`, `tenant-isolation.test.ts`
+
+**Interfaces:**
+- Consumes: Tasks 2, 3 (`Storage`), 4 (`withPublic`).
+- Produces:
+  - Contratos: `BENEFIT_ICONS` (lista fixa de nomes de ícones lucide: `HeartPulse`, `Bus`, `Utensils`, `GraduationCap`, `ShieldCheck`, `HardHat`, `Wallet`, `Smile`, `Clock`, `TrendingUp`, `Users`, `Home`); `careerPageContent` (Zod, só texto simples — recusa `<` seguido de letra em qualquer campo de texto):
+    - `hero: { enabled, title 3–80, subtitle 0–200, imageId: uuid|null }`
+    - `about: { enabled, title 3–80, body 0–3000, imageIds: uuid[] (máx. 4) }`
+    - `benefits: { enabled, title 3–80, items: { icon: BenefitIcon, title 2–60, text 0–240 }[] (máx. 12) }`
+    - `faq: { enabled, items: { question 5–200, answer 2–1500 }[] (máx. 15) }`
+    - `links: { instagram?, linkedin?, facebook?, site? (url http/https), whatsapp? (10–13 dígitos), email? }`
+    - `DEFAULT_CAREER_PAGE`: capa "Construa sua carreira na Falcão" / "Vagas abertas em obras e no escritório. Venha fazer parte.", demais seções ligadas com conteúdo vazio, exceto benefícios desligado.
+  - Banco: `career_pages` (tenant_id **unique**, draft jsonb, published jsonb null, published_at, updated_by) e `career_assets` (tenant_id, storage_key, filename, mime_type, size_bytes, created_by). RLS de tenant para `falcao_app`; `falcao_public` lê `career_pages (published)` da própria organização e **não** lê `career_assets` diretamente (ver função abaixo).
+  - Função `public_career_asset(p_tenant uuid, p_asset uuid) RETURNS TABLE(storage_key text, mime_type text) SECURITY DEFINER`: devolve o arquivo só se o id aparecer no `published` da organização (capa ou fotos do "Sobre").
+  - API interna (`settings.manage` ou `recruitment.manage`): `GET /career-page` → `{ draft, published, publishedAt, previewUrl }` (cria com `DEFAULT_CAREER_PAGE` se não existir); `PUT /career-page` (body `careerPageContent`) salva o rascunho; `POST /career-page/publish` copia rascunho → publicado e audita; `POST /career-page/assets` (multipart, imagem PNG/JPEG/WebP por `sniffMimeType`, até 5 MB) → `{ id, url }`; `GET /career-page/assets/:id` (interno, para a pré-visualização) → `{ url }` link temporário.
+  - API pública: `GET /api/public/v1/:slug/jobs` passa a devolver também `page: CareerPageContent | null` (só o publicado); `GET /api/public/v1/:slug/assets/:id` transmite a imagem com `Content-Type` do banco, `Cache-Control: public, max-age=300` e `X-Content-Type-Options: nosniff`; id que não está no publicado → 404.
+
+- [ ] **Step 1: Write the failing tests:** `GET` cria o padrão; `PUT` com `body` contendo `<script>` → 400; `PUT` não muda o que a rota pública devolve até `publish`; após publicar, a pública devolve o conteúdo novo; envio de PDF como imagem → 400; imagem enviada mas fora do publicado → 404 na rota pública; depois de usada na capa e publicada → 200 com `content-type` correto; gestor → 403 em `PUT`; empresa A não lê `career_pages` da B.
+- [ ] **Step 2:** → FAIL. **Step 3:** implementar. **Step 4:** → PASS; suíte inteira verde.
+- [ ] **Step 5: Commit** `feat(api): página oficial de vagas editável com rascunho e publicação`
+
+---
+
 ### Task 10: Worker — antivírus, retenção e renovação
 
 **Files:**
@@ -277,7 +329,7 @@
 **Interfaces:**
 - Produces:
   - `scanPendingFiles(db, storage, scanner, mailer, webOrigin): Promise<{ clean: number; infected: number; failed: number }>` — lê até 50 arquivos `pending` (sistema), `storage.read` → `scanner.scan`; `clean` marca; `infected` remove do armazenamento, marca, grava evento na candidatura ("Currículo removido: arquivo inseguro") e envia e-mail pedindo reenvio pelo link da vaga; erro do scanner mantém `pending` e conta em `failed`.
-  - `purgeExpired(tx, tenantId, storage, today): Promise<number>` — apaga candidaturas com `retentionUntil < today` cuja etapa seja `rejected`/`hired` ou vaga `closed` (nunca processo aberto), remove arquivos órfãos do armazenamento, apaga candidatos sem candidaturas; auditoria `recruitment.purged` com a contagem.
+  - `purgeExpired(tx, tenantId, storage, today): Promise<number>` — apaga candidaturas com `retentionUntil < today` com `status` `rejected`/`hired` ou vaga `closed` (nunca processo aberto), remove arquivos órfãos do armazenamento, apaga candidatos sem candidaturas; auditoria `recruitment.purged` com a contagem.
   - `consentRenewals(tx, tenantId, outbox, today): Promise<number>` — candidaturas com consentimento vencendo em 30 dias recebem um e-mail único (marca em `automation_marks`, chave `consent-renewal:{applicationId}:{retentionUntil}`) com links de renovar e excluir. Consentimento em candidatura: `retentionUntil = consentAt + talentPoolMonths`.
 
 - [ ] **Step 1: Write the failing tests:** arquivo com EICAR → removido, `infected`, e-mail enviado; PDF comum → `clean`; **`scanner.failing = true` → continua `pending`, `failed = 1`, e na rodada seguinte sem falha vira `clean`** (Review Focus 3); expurgo apaga candidatura recusada vencida, **mantém** candidatura vencida em `interview` de vaga aberta; renovação envia 1 e-mail e não repete na segunda rodada.
@@ -297,6 +349,7 @@
 - Consumes: Task 4 e 5.
 - Produces:
   - `publicApi.jobs(slug)`, `publicApi.job(slug, token)`, `publicApi.apply(slug, token, form: FormData)`, `publicApi.erase(token)`, `publicApi.renew(token)` — `fetch` em `/api/public/v1`, sem `credentials`, erros como `ApiError`.
+  - Página oficial (`/vagas/$empresa`): as seções publicadas (Task 9b) no topo — capa com imagem, "Sobre", cartões de benefícios com o ícone da lista, perguntas frequentes em sanfona, links —, seções desligadas não aparecem; imagens por `/api/public/v1/{slug}/assets/{id}`; texto renderizado como texto (parágrafos por quebra de linha, nunca `dangerouslySetInnerHTML`). Componente `CareerPageView({ content, slug })` exportado de `apps/web/src/public/career-page-view.tsx`, reutilizado pela pré-visualização do editor.
   - Lista: busca por texto e filtros cidade/regime; cartões com título, local, regime, contrato; vazio "No momento não há vagas abertas. Cadastre-se no banco de talentos" (só se houver vaga pública aberta; senão apenas o texto).
   - Vaga: descrição, requisitos, benefícios, salário se houver; formulário com campos do `applicationForm`, perguntas, `FileInput` (accept `.pdf`), consentimentos com textos: "Autorizo o uso dos meus dados para este processo seletivo." (obrigatório) e "Quero fazer parte do banco de talentos da Falcão por até 2 anos." (opcional); honeypot invisível `website`; `startedAt` gravado na montagem; Turnstile carregado só se `import.meta.env.VITE_TURNSTILE_SITE_KEY` existir; sucesso troca o formulário por "Candidatura enviada" + aviso do e-mail.
   - Vaga com `accepting: false`: formulário substituído por "Esta vaga não está recebendo candidaturas."
@@ -314,19 +367,20 @@
 
 **Files:**
 - Create: `apps/web/src/pages/recruitment.tsx` (lista de vagas), `apps/web/src/pages/job-board.tsx` (quadro), `apps/web/src/features/job-form.tsx` (gaveta de vaga com perguntas), `apps/web/src/features/candidate-drawer.tsx`, `apps/web/src/features/hire-drawer.tsx` (usa `EmployeeForm` com valores iniciais), `apps/web/src/pages/talent-pool.tsx`
-- Modify: `apps/web/src/components/navigation.ts` (seção "Gestão": "Recrutamento" `/recrutamento` ícone `BriefcaseBusiness`, permissão `recruitment.read`; "Banco de talentos" `/talentos` ícone `Contact`, `talent_pool.read`), `apps/web/src/router.tsx`, `apps/web/src/lib/types.ts`, `apps/web/src/features/employee-form.tsx` (prop `initial?: Partial<FormValues>`), `apps/web/src/pages/settings.tsx` (painel "Recrutamento": prazos de retenção, textos de e-mail de recusa e o trecho para embutir `<iframe src="{WEB_ORIGIN}/vagas/{slug}" …>` com botão copiar)
+- Modify: `apps/web/src/components/navigation.ts` (seção "Gestão": "Recrutamento" `/recrutamento` ícone `BriefcaseBusiness`, permissão `recruitment.read`; "Banco de talentos" `/talentos` ícone `Contact`, `talent_pool.read`), `apps/web/src/router.tsx`, `apps/web/src/lib/types.ts`, `apps/web/src/features/employee-form.tsx` (prop `initial?: Partial<FormValues>`), `apps/web/src/pages/settings.tsx` (painel "Recrutamento": editor das etapas com arrastar para reordenar, renomear, adicionar e remover — Novo travada —; prazos de retenção; textos dos e-mails de recusa e contratação; e o trecho para embutir `<iframe src="{WEB_ORIGIN}/vagas/{slug}" …>` com botão copiar). Criar também `apps/web/src/pages/careers-editor.tsx` (rota `/configuracoes/pagina-de-vagas`, Task 9b)
 - Test: `e2e/recruitment.spec.ts`
 
 **Interfaces:**
 - Consumes: Tasks 6–9.
 - Produces:
   - Lista de vagas: `DataTable` com título, situação (`Badge`), candidatos por etapa (mini barra), link copiável; ações Nova vaga, Publicar/Pausar/Encerrar.
-  - Quadro: 5 colunas abertas + coluna "Recusados" recolhível; cartões com `Avatar`, cidade, nota (estrelas), selo "Em verificação" quando `fileStatus='pending'`; arrastar com `Draggable` (soltar sobre coluna chama `POST /stage`; atualização otimista revertida em erro; `Flip` reposiciona os cartões); teclado: menu "Mover para…" em cada cartão (acessível sem arrastar). Soltar em "Contratado" não existe como alvo; a coluna mostra o botão "Contratar" nos cartões de Proposta.
+  - Quadro: uma coluna por etapa da organização (Task 2b, na ordem definida) + coluna "Recusados" recolhível; cartões com `Avatar`, cidade, nota (estrelas), selo "Em verificação" quando `fileStatus='pending'`; arrastar com `Draggable` (soltar sobre coluna chama `POST /stage`; atualização otimista revertida em erro; `Flip` reposiciona os cartões); teclado: menu "Mover para…" em cada cartão (acessível sem arrastar). Soltar em "Contratado" não existe como alvo; a coluna mostra o botão "Contratar" nos cartões de Proposta.
   - Gaveta do candidato: dados, respostas, currículo (botão baixar desabilitado com "Em verificação de segurança" se `pending`), linha do tempo de eventos, notas, nota 1–5, "Recusar" (pede motivo), "Contratar".
   - Banco de talentos: busca, filtros, etiquetas editáveis, aviso de duplicata com botão "Juntar fichas", "Convidar para vaga".
   - Quando `suggestCloseJob`, toast com ação "Encerrar vaga".
+  - Editor da página (`careers-editor.tsx`): formulário por seção à esquerda (ligar/desligar, campos, envio de imagens com `FileInput`, lista de benefícios com escolha de ícone, perguntas frequentes reordenáveis) e pré-visualização ao vivo à direita com `CareerPageView` (no celular, alterna por abas "Editar | Pré-visualizar"); salvamento automático do rascunho 1 s depois de parar de digitar, com indicador "Rascunho salvo"; botão "Publicar alterações" com confirmação; aviso quando o rascunho difere do publicado; link "Abrir página pública". Acesso pelo menu Configurações e por um botão na lista de vagas.
 
-- [ ] **Step 1: Write the failing e2e** (`e2e/recruitment.spec.ts`, ambiente com seed): RH cria vaga com uma pergunta sim/não e publica; abre `/vagas/{slug}` sem login (contexto novo), candidata-se com PDF; volta logado, vê o cartão em "Novo" com "Em verificação"; move para Triagem pelo menu "Mover para…"; recusa outro candidato com motivo; o banco de talentos encontra o candidato por cidade.
+- [ ] **Step 1: Write the failing e2e** (`e2e/recruitment.spec.ts`, ambiente com seed): RH cria vaga com uma pergunta sim/não e publica; abre `/vagas/{slug}` sem login (contexto novo), candidata-se com PDF; volta logado, vê o cartão em "Novo" com "Em verificação"; move para Triagem pelo menu "Mover para…"; recusa outro candidato com motivo; o banco de talentos encontra o candidato por cidade; em Configurações acrescenta a etapa "Exame admissional (ASO)" e ela aparece como coluna no quadro; no editor da página muda o título da capa, publica, e a página pública mostra o título novo.
 - [ ] **Step 2:** `npm run test:e2e -- recruitment` → FAIL.
 - [ ] **Step 3:** Implementar telas.
 - [ ] **Step 4:** e2e → PASS; `npm run validate` verde; conferir telas em claro/escuro e 390 px.

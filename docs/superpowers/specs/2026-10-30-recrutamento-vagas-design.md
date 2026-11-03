@@ -94,6 +94,27 @@ O recrutamento é o começo da paridade porque foi o pedido mais concreto e porq
 - **Gestor:** vê e movimenta candidaturas das vagas em que é gestor responsável; não vê o banco de talentos inteiro.
 - **Colaborador:** sem acesso.
 
+### 5.8 Etapas personalizáveis (acréscimo de 03/11/2026)
+- A Falcão define as etapas do processo seletivo da organização, em Configurações → Recrutamento: nome e ordem, por exemplo "Exame admissional (ASO)" e "Entrega de documentos".
+- **Novo** é sempre a primeira etapa e não pode ser renomeada nem removida. **Contratado** e **Recusado** não são etapas do quadro, e sim desfechos.
+- Etapas iniciais de toda organização: Novo, Triagem, Entrevista, Proposta.
+- Uma etapa com candidaturas em andamento não pode ser removida. O RH move os candidatos antes (decisão do redator).
+- "Contratar" fica disponível em qualquer etapa, menos em Novo (decisão do redator, substitui "só de Proposta").
+- As etapas valem para todas as vagas da organização. Etapas por vaga ficam para depois.
+
+### 5.9 Página oficial de vagas editável (acréscimo de 03/11/2026)
+- O endereço público (`/vagas/:empresa`) é a página oficial de recrutamento. Mostra um conteúdo institucional editável e, abaixo, todas as vagas abertas.
+- O editor fica em Configurações → Página de vagas. Tem pré-visualização ao vivo e **rascunho separado do publicado**: o público só vê as alterações depois de "Publicar alterações".
+- Seções editáveis, todas com ligar/desligar:
+  - **capa:** título, subtítulo e imagem;
+  - **"Sobre a Falcão":** texto e até 4 fotos;
+  - **"Por que trabalhar aqui":** até 12 cartões, com ícone de uma lista fixa, título e texto;
+  - **perguntas frequentes:** até 15;
+  - **links:** Instagram, LinkedIn, Facebook, WhatsApp, site e e-mail de contato.
+- O texto é simples, com parágrafos e sem HTML, para não abrir brecha de script na página pública. Os links só aceitam http/https; o WhatsApp é um número e o e-mail é validado.
+- Imagens só em PNG, JPEG ou WebP, até 5 MB, conferidas pelo conteúdo. São servidas pela rota pública apenas quando estão na versão publicada.
+- A marca, as cores e as fontes seguem o design system, não são editáveis.
+
 ### 5.7 Construção
 - Dentro do monorepo atual: módulo `recruitment` na API, tabelas novas com RLS, telas no app web com o design system. Sem serviço separado.
 
