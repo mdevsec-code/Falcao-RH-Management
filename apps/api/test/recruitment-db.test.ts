@@ -20,6 +20,10 @@ let tenantB: string
 let deptA: string
 let deptB: string
 const jobs = { draft: '', published: '', paused: '', closed: '', otherTenant: '' }
+/** Etapa inicial (Novo) de cada empresa e uma etapa de A que não é a inicial. */
+const stages = { initialA: '', initialB: '', screeningA: '' }
+/** Candidato, candidatura e pergunta da empresa B, para os testes de inclusão cruzada. */
+const ofB = { candidate: '', application: '', question: '' }
 let questionPublished: string
 
 type Row = Record<string, unknown>
@@ -62,9 +66,10 @@ const insertApplicant = async (
     insert into candidates (id, tenant_id, full_name, email, phone, city, state)
     values (${candidateId}, ${tenantId}, 'Pessoa Candidata', ${opts.email}, '71999990000', 'Salvador', 'BA')`)
   await db.execute(sql`
-    insert into applications (id, tenant_id, job_id, candidate_id, email, talent_pool_consent, consent_at, privacy_token)
+    insert into applications (id, tenant_id, job_id, candidate_id, email, talent_pool_consent, consent_at, privacy_token, stage_id)
     values (${applicationId}, ${tenantId}, ${jobId}, ${candidateId}, ${opts.email}, ${opts.consent ?? false},
-            ${opts.consent ? sql`now() - interval '1 year'` : null}, ${token})`)
+            ${opts.consent ? sql`now() - interval '1 year'` : null}, ${token},
+            ${tenantId === tenantB ? stages.initialB : stages.initialA})`)
   if (opts.storageKey) {
     await db.execute(sql`
       insert into candidate_files (tenant_id, candidate_id, application_id, storage_key, filename, size_bytes)
@@ -94,6 +99,21 @@ beforeAll(async () => {
     insert into job_questions (id, tenant_id, job_id, position, kind, label)
     values (${questionPublished}, ${tenantA}, ${jobs.published}, 0, 'text', 'Tem NR-35?'),
            (${randomUUID()}, ${tenantA}, ${jobs.draft}, 0, 'text', 'Pergunta do rascunho')`)
+
+  const stageOf = async (tenantId: string, position: number) =>
+    (await rows<{ id: string }>(db, sql`
+      select id from recruitment_stages where tenant_id = ${tenantId} and position = ${position}`))[0]!.id
+  stages.initialA = await stageOf(tenantA, 0)
+  stages.screeningA = await stageOf(tenantA, 1)
+  stages.initialB = await stageOf(tenantB, 0)
+
+  ofB.question = randomUUID()
+  await db.execute(sql`
+    insert into job_questions (id, tenant_id, job_id, position, kind, label)
+    values (${ofB.question}, ${tenantB}, ${jobs.otherTenant}, 0, 'text', 'Pergunta B')`)
+  const applicantB = await insertApplicant(tenantB, jobs.otherTenant, { email: 'b@exemplo.com' })
+  ofB.candidate = applicantB.candidateId
+  ofB.application = applicantB.applicationId
 })
 
 afterAll(() => close())
@@ -137,34 +157,82 @@ describe('role pública (falcao_public)', () => {
     const candidateId = randomUUID()
     const applicationId = randomUUID()
     await asPublic(tenantA, async tx => {
+      // A etapa inicial é a única que a role pública enxerga.
+      const [initial] = await rows<{ id: string }>(tx, sql`select id from recruitment_stages`)
       await tx.execute(sql`
         insert into candidates (id, tenant_id, full_name, email, phone, city, state)
         values (${candidateId}, ${tenantA}, 'Nova Pessoa', 'nova@exemplo.com', '71999990000', 'Salvador', 'BA')`)
       await tx.execute(sql`
-        insert into applications (id, tenant_id, job_id, candidate_id, email, privacy_token)
-        values (${applicationId}, ${tenantA}, ${jobs.published}, ${candidateId}, 'nova@exemplo.com', ${randomUUID()})`)
+        insert into applications (id, tenant_id, job_id, candidate_id, email, privacy_token, stage_id)
+        values (${applicationId}, ${tenantA}, ${jobs.published}, ${candidateId}, 'nova@exemplo.com', ${randomUUID()}, ${initial!.id})`)
       await tx.execute(sql`
         insert into application_answers (tenant_id, application_id, question_id, value)
         values (${tenantA}, ${applicationId}, ${questionPublished}, 'Sim')`)
       await tx.execute(sql`
-        insert into application_events (tenant_id, application_id, from_stage, to_stage)
-        values (${tenantA}, ${applicationId}, null, 'new')`)
+        insert into application_events (tenant_id, application_id, to_stage_id)
+        values (${tenantA}, ${applicationId}, ${initial!.id})`)
       await tx.execute(sql`
         insert into candidate_files (tenant_id, candidate_id, application_id, storage_key, filename, size_bytes)
         values (${tenantA}, ${candidateId}, ${applicationId}, ${`recruitment/${tenantA}/${randomUUID()}.pdf`}, 'cv.pdf', 10)`)
     })
-    const [saved] = await rows<{ stage: string }>(db, sql`select stage from applications where id = ${applicationId}`)
-    expect(saved!.stage).toBe('new')
+    const [saved] = await rows<{ status: string; stage_id: string }>(
+      db,
+      sql`select status, stage_id from applications where id = ${applicationId}`,
+    )
+    expect(saved).toEqual({ status: 'open', stage_id: stages.initialA })
+    // O rótulo do evento vem do banco, não de quem grava.
+    const [event] = await rows(db, sql`
+      select from_stage_id, from_label, to_stage_id, to_label, outcome from application_events where application_id = ${applicationId}`)
+    expect(event).toEqual({ from_stage_id: null, from_label: null, to_stage_id: stages.initialA, to_label: 'Novo', outcome: null })
     // Mesmo e-mail na mesma vaga: a unicidade (job_id, email) barra.
     expect(
       await reason(
         asPublic(tenantA, tx =>
           tx.execute(sql`
-            insert into applications (tenant_id, job_id, candidate_id, email, privacy_token)
-            values (${tenantA}, ${jobs.published}, ${candidateId}, 'nova@exemplo.com', ${randomUUID()})`),
+            insert into applications (tenant_id, job_id, candidate_id, email, privacy_token, stage_id)
+            values (${tenantA}, ${jobs.published}, ${candidateId}, 'nova@exemplo.com', ${randomUUID()}, ${stages.initialA})`),
         ),
       ),
     ).toMatch(/applications_job_email_uq/)
+  })
+
+  it('lê só o id da etapa inicial da própria empresa', async () => {
+    const visible = await asPublic(tenantA, tx => rows<{ id: string }>(tx, sql`select id from recruitment_stages`))
+    expect(visible).toEqual([{ id: stages.initialA }])
+    expect(await reason(asPublic(tenantA, tx => tx.execute(sql`select name from recruitment_stages`)))).toMatch(
+      /permission denied/,
+    )
+    expect(await reason(asPublic(tenantA, tx => tx.execute(sql`update recruitment_stages set position = 9`)))).toMatch(
+      /permission denied/,
+    )
+  })
+
+  /** Candidatura pública em A com os campos dados, numa ficha nova. */
+  const publicApplication = (fields: SQL) =>
+    reason(
+      asPublic(tenantA, async tx => {
+        const candidateId = randomUUID()
+        await tx.execute(sql`
+          insert into candidates (id, tenant_id, full_name, email, phone, city, state)
+          values (${candidateId}, ${tenantA}, 'Pessoa', 'p@exemplo.com', '71999990000', 'Salvador', 'BA')`)
+        await tx.execute(sql`
+          insert into applications (tenant_id, candidate_id, email, privacy_token, job_id, stage_id, status, rating)
+          values (${tenantA}, ${candidateId}, 'p@exemplo.com', ${randomUUID()}, ${fields})`)
+      }),
+    )
+
+  it('não insere candidatura fora da etapa inicial, já encerrada ou com nota', async () => {
+    expect(await publicApplication(sql`${jobs.published}, ${stages.initialA}, 'open', null`)).toBe('aceito')
+    expect(await publicApplication(sql`${jobs.published}, ${stages.screeningA}, 'open', null`)).toMatch(/row-level security/)
+    expect(await publicApplication(sql`${jobs.published}, ${stages.initialA}, 'hired', null`)).toMatch(/row-level security/)
+    expect(await publicApplication(sql`${jobs.published}, ${stages.initialA}, 'open', 5`)).toMatch(/row-level security/)
+    expect(await publicApplication(sql`${jobs.published}, ${stages.initialB}, 'open', null`)).toMatch(
+      /row-level security|applications_stage_same_tenant_fk/,
+    )
+  })
+
+  it('não insere candidatura em vaga que não está publicada', async () => {
+    expect(await publicApplication(sql`${jobs.draft}, ${stages.initialA}, 'open', null`)).toMatch(/row-level security/)
   })
 
   it('não insere candidato com o tenant de outra empresa', async () => {
@@ -179,19 +247,54 @@ describe('role pública (falcao_public)', () => {
     ).toMatch(/row-level security/)
   })
 
-  it('não insere candidatura em vaga que não está publicada', async () => {
-    const candidateId = randomUUID()
-    const result = await reason(
-      asPublic(tenantA, async tx => {
-        await tx.execute(sql`
-          insert into candidates (id, tenant_id, full_name, email, phone, city, state)
-          values (${candidateId}, ${tenantA}, 'Pessoa', 'p@exemplo.com', '71999990000', 'Salvador', 'BA')`)
-        await tx.execute(sql`
-          insert into applications (tenant_id, job_id, candidate_id, email, privacy_token)
-          values (${tenantA}, ${jobs.draft}, ${candidateId}, 'p@exemplo.com', ${randomUUID()})`)
-      }),
+  it.each([
+    [
+      'applications',
+      () => sql`
+        insert into applications (tenant_id, job_id, candidate_id, email, privacy_token, stage_id)
+        values (${tenantB}, ${jobs.otherTenant}, ${ofB.candidate}, ${`${randomUUID()}@exemplo.com`}, ${randomUUID()}, ${stages.initialB})`,
+    ],
+    [
+      'application_answers',
+      () => sql`
+        insert into application_answers (tenant_id, application_id, question_id, value)
+        values (${tenantB}, ${ofB.application}, ${ofB.question}, 'Sim')`,
+    ],
+    [
+      'application_events',
+      () => sql`
+        insert into application_events (tenant_id, application_id, to_stage_id)
+        values (${tenantB}, ${ofB.application}, ${stages.initialB})`,
+    ],
+    [
+      'candidate_files',
+      () => sql`
+        insert into candidate_files (tenant_id, candidate_id, storage_key, filename, size_bytes)
+        values (${tenantB}, ${ofB.candidate}, ${randomUUID()}, 'cv.pdf', 10)`,
+    ],
+  ])('não insere em %s com o tenant de outra empresa', async (_table, query) => {
+    expect(await reason(asPublic(tenantA, tx => tx.execute(query())))).toMatch(/row-level security/)
+  })
+
+  it('evento público só registra a entrada na etapa inicial, sem autor nem desfecho', async () => {
+    const { applicationId } = await insertApplicant(tenantA, jobs.published, { email: 'evento@exemplo.com' })
+    const [actor] = await rows<{ id: string }>(db, sql`
+      insert into "user" (id, name, email) values (${randomUUID()}, 'RH', ${`${randomUUID()}@rh.test`}) returning id`)
+    const event = (columns: SQL, values: SQL) =>
+      reason(
+        asPublic(tenantA, tx =>
+          tx.execute(sql`insert into application_events (tenant_id, application_id, ${columns})
+                         values (${tenantA}, ${applicationId}, ${values})`),
+        ),
+      )
+    expect(await event(sql`to_stage_id`, sql`${stages.initialA}`)).toBe('aceito')
+    expect(await event(sql`to_stage_id, actor_user_id`, sql`${stages.initialA}, ${actor!.id}`)).toMatch(/row-level security/)
+    expect(await event(sql`to_stage_id`, sql`${stages.screeningA}`)).toMatch(/row-level security/)
+    expect(await event(sql`from_stage_id, to_stage_id`, sql`${stages.initialA}, ${stages.initialA}`)).toMatch(
+      /row-level security/,
     )
-    expect(result).toMatch(/row-level security/)
+    expect(await event(sql`to_stage_id, outcome`, sql`${stages.initialA}, 'hired'`)).toMatch(/row-level security/)
+    expect(await event(sql`note`, sql`'Só uma nota'`)).toMatch(/row-level security/)
   })
 
   it('não insere arquivo já marcado como limpo', async () => {
@@ -229,13 +332,15 @@ describe('funções públicas (SECURITY DEFINER)', () => {
   it('public_application_exists detecta duplicata sem diferenciar maiúsculas', async () => {
     await insertApplicant(tenantA, jobs.published, { email: 'dup@exemplo.com' })
     const [result] = await asPublic(tenantA, tx =>
-      rows<{ yes: boolean; no: boolean }>(
+      rows<{ yes: boolean; no: boolean; other: boolean }>(
         tx,
         sql`select public_application_exists(${tenantA}, ${jobs.published}, ' DUP@Exemplo.com ') as yes,
-                   public_application_exists(${tenantA}, ${jobs.paused}, 'dup@exemplo.com') as no`,
+                   public_application_exists(${tenantA}, ${jobs.paused}, 'dup@exemplo.com') as no,
+                   public_application_exists(${tenantB}, ${jobs.otherTenant}, 'b@exemplo.com') as other`,
       ),
     )
-    expect(result).toEqual({ yes: true, no: false })
+    // Outra empresa: falso mesmo com a candidatura existindo (o tenant tem de ser o da transação).
+    expect(result).toEqual({ yes: true, no: false, other: false })
   })
 
   it('public_erase_by_token com token inexistente devolve lista vazia', async () => {
@@ -252,11 +357,11 @@ describe('funções públicas (SECURITY DEFINER)', () => {
       storageKey: key,
     })
     await db.execute(sql`
-      insert into application_events (tenant_id, application_id, to_stage) values (${tenantA}, ${applicationId}, 'new')`)
+      insert into application_events (tenant_id, application_id, to_stage_id) values (${tenantA}, ${applicationId}, ${stages.initialA})`)
     // Segunda candidatura da mesma pessoa, em outra vaga.
     await db.execute(sql`
-      insert into applications (tenant_id, job_id, candidate_id, email, privacy_token)
-      values (${tenantA}, ${jobs.paused}, ${candidateId}, 'apagar@exemplo.com', ${randomUUID()})`)
+      insert into applications (tenant_id, job_id, candidate_id, email, privacy_token, stage_id)
+      values (${tenantA}, ${jobs.paused}, ${candidateId}, 'apagar@exemplo.com', ${randomUUID()}, ${stages.initialA})`)
 
     const [result] = await asPublic(tenantA, tx =>
       rows<{ keys: string[] }>(tx, sql`select public_erase_by_token(${token}) as keys`),
@@ -283,8 +388,8 @@ describe('funções públicas (SECURITY DEFINER)', () => {
       consent: true,
     })
     await db.execute(sql`
-      insert into applications (tenant_id, job_id, candidate_id, email, privacy_token)
-      values (${tenantA}, ${jobs.paused}, ${candidateId}, 'renovar@exemplo.com', ${randomUUID()})`)
+      insert into applications (tenant_id, job_id, candidate_id, email, privacy_token, stage_id)
+      values (${tenantA}, ${jobs.paused}, ${candidateId}, 'renovar@exemplo.com', ${randomUUID()}, ${stages.initialA})`)
 
     const [result] = await asPublic(tenantA, tx =>
       rows<{ ok: boolean; none: boolean }>(

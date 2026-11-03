@@ -2,8 +2,10 @@
  * Recrutamento: vagas, perguntas, banco de talentos e candidaturas.
  * Isolamento por tenant, privilégios (inclusive da role pública
  * `falcao_public`), chaves compostas e funções públicas na migração
- * `0005_recruitment_security.sql`.
+ * `0005_recruitment_security.sql`; etapas por organização em
+ * `0007_recruitment_stages_security.sql`.
  */
+import { sql } from 'drizzle-orm'
 import {
   boolean,
   date,
@@ -19,7 +21,14 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 
-import { APPLICATION_STAGES, JOB_STATUSES, JOB_VISIBILITIES, QUESTION_KINDS, WORK_MODES } from '@falcao-rh/contracts'
+import {
+  APPLICATION_OUTCOMES,
+  APPLICATION_STATUSES,
+  JOB_STATUSES,
+  JOB_VISIBILITIES,
+  QUESTION_KINDS,
+  WORK_MODES,
+} from '@falcao-rh/contracts'
 
 import { user } from './auth'
 import { contractTypeEnum, departments, positions, tenants, units } from './domain'
@@ -36,8 +45,30 @@ export const jobStatusEnum = pgEnum('job_status', JOB_STATUSES)
 export const jobVisibilityEnum = pgEnum('job_visibility', JOB_VISIBILITIES)
 export const workModeEnum = pgEnum('work_mode', WORK_MODES)
 export const questionKindEnum = pgEnum('question_kind', QUESTION_KINDS)
-export const applicationStageEnum = pgEnum('application_stage', APPLICATION_STAGES)
+export const applicationStatusEnum = pgEnum('application_status', APPLICATION_STATUSES)
+export const applicationOutcomeEnum = pgEnum('application_outcome', APPLICATION_OUTCOMES)
 export const fileScanStatusEnum = pgEnum('file_scan_status', ['pending', 'clean', 'infected'])
+
+// ---------- etapas do processo seletivo ----------
+
+/**
+ * Etapas do quadro, por organização (spec 5.8). A inicial (Novo) é fixa e
+ * fica na posição 0. `(tenant_id, position)` é única e adiável (reordenar
+ * troca posições), na migração 0007.
+ */
+export const recruitmentStages = pgTable(
+  'recruitment_stages',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    name: text('name').notNull(),
+    position: integer('position').notNull(),
+    isInitial: boolean('is_initial').default(false).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  t => [uniqueIndex('recruitment_stages_tenant_initial_uq').on(t.tenantId).where(sql`${t.isInitial}`)],
+)
 
 // ---------- vagas ----------
 
@@ -140,7 +171,12 @@ export const applications = pgTable(
       .references(() => candidates.id, { onDelete: 'cascade' }),
     /** Cópia em minúsculas do e-mail do formulário: barra a candidatura repetida. */
     email: text('email').notNull(),
-    stage: applicationStageEnum('stage').default('new').notNull(),
+    status: applicationStatusEnum('status').default('open').notNull(),
+    /**
+     * Etapa atual. Obrigatória em andamento (CHECK na 0007); nas encerradas
+     * guarda onde parou, e vira nulo se a etapa for removida.
+     */
+    stageId: uuid('stage_id').references(() => recruitmentStages.id, { onDelete: 'restrict' }),
     rejectionReason: text('rejection_reason'),
     rating: integer('rating'),
     talentPoolConsent: boolean('talent_pool_consent').default(false).notNull(),
@@ -153,7 +189,8 @@ export const applications = pgTable(
   },
   t => [
     uniqueIndex('applications_job_email_uq').on(t.jobId, t.email),
-    index('applications_job_stage_idx').on(t.jobId, t.stage),
+    index('applications_job_status_stage_idx').on(t.jobId, t.status, t.stageId),
+    index('applications_stage_idx').on(t.stageId),
     index('applications_candidate_idx').on(t.candidateId),
     index('applications_tenant_retention_idx').on(t.tenantId, t.retentionUntil),
   ],
@@ -176,7 +213,11 @@ export const applicationAnswers = pgTable(
   t => [uniqueIndex('application_answers_application_question_uq').on(t.applicationId, t.questionId)],
 )
 
-/** Histórico de etapas: somente inclusão. */
+/**
+ * Histórico da candidatura: somente inclusão. As etapas vão por id e por
+ * rótulo: o rótulo é preenchido pelo banco a partir do id (gatilho na 0007) e
+ * sobrevive a renomear ou remover a etapa (o id vira nulo).
+ */
 export const applicationEvents = pgTable(
   'application_events',
   {
@@ -185,9 +226,12 @@ export const applicationEvents = pgTable(
     applicationId: uuid('application_id')
       .notNull()
       .references(() => applications.id, { onDelete: 'cascade' }),
-    fromStage: applicationStageEnum('from_stage'),
-    /** Nulo em eventos sem mudança de etapa (ex.: currículo removido), que exigem `note`. */
-    toStage: applicationStageEnum('to_stage'),
+    fromStageId: uuid('from_stage_id').references(() => recruitmentStages.id, { onDelete: 'set null' }),
+    fromLabel: text('from_label'),
+    toStageId: uuid('to_stage_id').references(() => recruitmentStages.id, { onDelete: 'set null' }),
+    toLabel: text('to_label'),
+    /** Contratação, recusa ou reabertura; nulo em mudança simples de etapa. */
+    outcome: applicationOutcomeEnum('outcome'),
     /** Nulo quando foi o candidato ou o sistema. */
     actorUserId: text('actor_user_id').references(() => user.id, { onDelete: 'set null' }),
     note: text('note'),

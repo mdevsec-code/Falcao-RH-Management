@@ -96,10 +96,15 @@ describe('isolamento das tabelas do recrutamento', () => {
     question: randomUUID(),
     candidate: randomUUID(),
     application: randomUUID(),
+    /** Etapa inicial da B, criada junto com a organização. */
+    stage: '',
   }
 
   /** Linha nova de cada tabela, com o tenant e as referências da empresa B. */
   const rowOfB: Record<string, () => SQL> = {
+    recruitment_stages: () => sql`
+      insert into recruitment_stages (tenant_id, name, position)
+      values (${b.tenant.id}, 'Etapa B', ${Math.floor(Math.random() * 1e6) + 10})`,
     job_openings: () => sql`
       insert into job_openings (tenant_id, title, contract_type, work_mode, description, status, share_token)
       values (${b.tenant.id}, 'Vaga B', 'clt', 'site', 'Descrição longa o bastante.', 'published', ${randomUUID()})`,
@@ -110,14 +115,14 @@ describe('isolamento das tabelas do recrutamento', () => {
       insert into candidates (tenant_id, full_name, email, phone, city, state)
       values (${b.tenant.id}, 'Candidata B', 'b@exemplo.com', '71999990000', 'Salvador', 'BA')`,
     applications: () => sql`
-      insert into applications (tenant_id, job_id, candidate_id, email, privacy_token)
-      values (${b.tenant.id}, ${B.job}, ${B.candidate}, ${`${randomUUID()}@exemplo.com`}, ${randomUUID()})`,
+      insert into applications (tenant_id, job_id, candidate_id, email, privacy_token, stage_id)
+      values (${b.tenant.id}, ${B.job}, ${B.candidate}, ${`${randomUUID()}@exemplo.com`}, ${randomUUID()}, ${B.stage})`,
     application_answers: () => sql`
       insert into application_answers (tenant_id, application_id, question_id, value)
       values (${b.tenant.id}, ${B.application}, ${B.question}, 'Sim')`,
     application_events: () => sql`
-      insert into application_events (tenant_id, application_id, from_stage, to_stage)
-      values (${b.tenant.id}, ${B.application}, null, 'new')`,
+      insert into application_events (tenant_id, application_id, to_stage_id)
+      values (${b.tenant.id}, ${B.application}, ${B.stage})`,
     application_notes: () => sql`
       insert into application_notes (tenant_id, application_id, body)
       values (${b.tenant.id}, ${B.application}, 'Nota B')`,
@@ -134,6 +139,10 @@ describe('isolamento das tabelas do recrutamento', () => {
     )
 
   beforeAll(async () => {
+    const [stage] = rowsOf<{ id: string }>(
+      await t.db.execute(sql`select id from recruitment_stages where tenant_id = ${b.tenant.id} and is_initial`),
+    )
+    B.stage = stage!.id
     await t.db.execute(sql`
       insert into job_openings (id, tenant_id, title, contract_type, work_mode, description, status, share_token)
       values (${B.job}, ${b.tenant.id}, 'Vaga B', 'clt', 'site', 'Descrição longa o bastante.', 'published', ${randomUUID()})`)
@@ -144,8 +153,8 @@ describe('isolamento das tabelas do recrutamento', () => {
       insert into candidates (id, tenant_id, full_name, email, phone, city, state)
       values (${B.candidate}, ${b.tenant.id}, 'Candidata B', 'b@exemplo.com', '71999990000', 'Salvador', 'BA')`)
     await t.db.execute(sql`
-      insert into applications (id, tenant_id, job_id, candidate_id, email, privacy_token)
-      values (${B.application}, ${b.tenant.id}, ${B.job}, ${B.candidate}, 'b@exemplo.com', ${randomUUID()})`)
+      insert into applications (id, tenant_id, job_id, candidate_id, email, privacy_token, stage_id)
+      values (${B.application}, ${b.tenant.id}, ${B.job}, ${B.candidate}, 'b@exemplo.com', ${randomUUID()}, ${B.stage})`)
     for (const table of ['application_answers', 'application_events', 'application_notes', 'candidate_files']) {
       await t.db.execute(rowOfB[table]!())
     }
@@ -153,7 +162,10 @@ describe('isolamento das tabelas do recrutamento', () => {
 
   it.each(tables)('a empresa A não lê %s da B', async table => {
     const rows = await asA(async tx =>
-      rowsOf<{ total: number }>(await tx.execute(sql`select count(*)::int as total from ${sql.identifier(table)}`)),
+      // Só linhas de outras empresas: a A tem as próprias etapas.
+      rowsOf<{ total: number }>(
+        await tx.execute(sql`select count(*)::int as total from ${sql.identifier(table)} where tenant_id <> ${a.tenant.id}`),
+      ),
     )
     expect(rows[0]!.total).toBe(0)
     const [owner] = rowsOf<{ total: number }>(
@@ -168,25 +180,47 @@ describe('isolamento das tabelas do recrutamento', () => {
 
   it('a empresa A não altera nem apaga linhas do recrutamento da B', async () => {
     const changed = await asA(async tx => [
-      ...rowsOf(await tx.execute(sql`update applications set stage = 'rejected' returning id`)),
+      ...rowsOf(await tx.execute(sql`update applications set status = 'rejected' returning id`)),
       ...rowsOf(await tx.execute(sql`delete from candidates returning id`)),
     ])
     expect(changed).toHaveLength(0)
   })
 
-  it('a empresa A não candidata ninguém a uma vaga da B (chave composta)', async () => {
-    const candidate = randomUUID()
-    const result = await failure(
+  /** Candidatura da empresa A apontando para a vaga e a etapa dadas. */
+  const applicationOfA = async (job: () => Promise<string> | string, stage: () => Promise<string> | string) => {
+    // Resolvidos fora da transação: o PGlite tem uma conexão só.
+    const jobId = await job()
+    const stageId = await stage()
+    return failure(
       asA(async tx => {
+        const candidate = randomUUID()
         await tx.execute(sql`
           insert into candidates (id, tenant_id, full_name, email, phone, city, state)
           values (${candidate}, ${a.tenant.id}, 'Candidata A', 'a@exemplo.com', '71999990000', 'Salvador', 'BA')`)
         await tx.execute(sql`
-          insert into applications (tenant_id, job_id, candidate_id, email, privacy_token)
-          values (${a.tenant.id}, ${B.job}, ${candidate}, 'a@exemplo.com', ${randomUUID()})`)
+          insert into applications (tenant_id, job_id, candidate_id, email, privacy_token, stage_id)
+          values (${a.tenant.id}, ${jobId}, ${candidate}, 'a@exemplo.com', ${randomUUID()}, ${stageId})`)
       }),
     )
-    expect(result).toMatch(/applications_job_same_tenant_fk/)
+  }
+  const initialOfA = async () =>
+    rowsOf<{ id: string }>(
+      await t.db.execute(sql`select id from recruitment_stages where tenant_id = ${a.tenant.id} and is_initial`),
+    )[0]!.id
+  const publishedJobOfA = async () => {
+    const id = randomUUID()
+    await t.db.execute(sql`
+      insert into job_openings (id, tenant_id, title, contract_type, work_mode, description, status, share_token)
+      values (${id}, ${a.tenant.id}, 'Vaga A', 'clt', 'site', 'Descrição longa o bastante.', 'published', ${randomUUID()})`)
+    return id
+  }
+
+  it('a empresa A não candidata ninguém a uma vaga da B (chave composta)', async () => {
+    expect(await applicationOfA(() => B.job, initialOfA)).toMatch(/applications_job_same_tenant_fk/)
+  })
+
+  it('a candidatura da empresa A não usa etapa da B (chave composta)', async () => {
+    expect(await applicationOfA(publishedJobOfA, () => B.stage)).toMatch(/applications_stage_same_tenant_fk/)
   })
 })
 

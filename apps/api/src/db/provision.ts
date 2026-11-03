@@ -2,6 +2,7 @@ import type { Role } from '@falcao-rh/contracts'
 
 import type { Auth } from '../auth/auth'
 import { ensureDefaultCategories } from '../modules/documents/documents.service'
+import { ensureDefaultStages } from '../modules/recruitment/stages.service'
 import type { Database } from './client'
 import { memberships, tenants } from './schema'
 
@@ -12,6 +13,7 @@ import { memberships, tenants } from './schema'
 export const createTenant = async (db: Database, input: { name: string; slug: string; cnpj?: string }) => {
   const [tenant] = await db.insert(tenants).values(input).returning()
   await ensureDefaultCategories(db, tenant!.id)
+  await ensureDefaultStages(db, tenant!.id)
   return tenant!
 }
 

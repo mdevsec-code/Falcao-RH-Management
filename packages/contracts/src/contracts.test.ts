@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  APPLICATION_STATUS_LABELS,
+  APPLICATION_STATUSES,
   applicationForm,
   can,
+  DEFAULT_STAGES,
   employeeInput,
   isValidCpf,
   jobInput,
@@ -10,6 +13,7 @@ import {
   RECRUITMENT_DEFAULTS,
   ROLE_PERMISSIONS,
   stageMove,
+  stagesInput,
   tenantSettingsInput,
 } from './index'
 
@@ -76,11 +80,37 @@ describe('Recrutamento', () => {
     expect(can('employee', 'recruitment.read')).toBe(false)
   })
 
-  it('stageMove exige motivo na recusa e não permite contratar direto', () => {
-    expect(stageMove.safeParse({ stage: 'rejected' }).success).toBe(false)
-    expect(stageMove.safeParse({ stage: 'rejected', reason: 'Perfil não aderente' }).success).toBe(true)
-    expect(stageMove.safeParse({ stage: 'interview' }).success).toBe(true)
-    expect(stageMove.safeParse({ stage: 'hired' }).success).toBe(false)
+  it('stageMove move para uma etapa ou recusa com motivo, e não contrata direto', () => {
+    const stageId = '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b'
+    expect(stageMove.safeParse({ stageId }).success).toBe(true)
+    expect(stageMove.safeParse({ stageId: 'interview' }).success).toBe(false)
+    expect(stageMove.safeParse({ outcome: 'rejected' }).success).toBe(false)
+    expect(stageMove.safeParse({ outcome: 'rejected', reason: 'Perfil não aderente' }).success).toBe(true)
+    expect(stageMove.safeParse({ outcome: 'hired' }).success).toBe(false)
+    expect(stageMove.safeParse({ stage: 'interview' }).success).toBe(false)
+  })
+
+  it('situações da candidatura e etapas iniciais', () => {
+    expect(APPLICATION_STATUSES).toEqual(['open', 'hired', 'rejected'])
+    expect(APPLICATION_STATUS_LABELS).toEqual({ open: 'Em andamento', hired: 'Contratado', rejected: 'Recusado' })
+    expect(DEFAULT_STAGES).toEqual(['Novo', 'Triagem', 'Entrevista', 'Proposta'])
+  })
+
+  it('stagesInput: 1 a 12 etapas, nomes de 3 a 40 caracteres, sem repetir', () => {
+    const named = (...names: string[]) => ({ stages: names.map(name => ({ name })) })
+    expect(stagesInput.safeParse(named('Novo', 'Triagem', 'Exame admissional (ASO)')).success).toBe(true)
+    expect(stagesInput.safeParse({ stages: [] }).success).toBe(false)
+    expect(stagesInput.safeParse(named(...Array.from({ length: 13 }, (_, i) => `Etapa ${i}`))).success).toBe(false)
+    expect(stagesInput.safeParse(named('Novo', 'AB')).success).toBe(false)
+    expect(stagesInput.safeParse(named('Novo', 'x'.repeat(41))).success).toBe(false)
+    expect(stagesInput.safeParse(named('Novo', 'Triagem', ' triagem ')).success).toBe(false)
+    expect(stagesInput.safeParse({ stages: [{ id: 'nao-e-uuid', name: 'Novo' }] }).success).toBe(false)
+  })
+
+  it('stagesInput ignora o nome da primeira etapa (sempre Novo)', () => {
+    // A primeira é a etapa fixa: o nome dela não conta, e "novo" em outra posição repete.
+    expect(stagesInput.safeParse({ stages: [{ name: 'Triagem' }, { name: 'Triagem' }] }).success).toBe(true)
+    expect(stagesInput.safeParse({ stages: [{ name: 'Novo' }, { name: 'NOVO' }] }).success).toBe(false)
   })
 
   const validApplication = {

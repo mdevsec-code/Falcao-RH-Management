@@ -3,20 +3,54 @@ import { z } from 'zod'
 import { isValidCpf, onlyDigits } from './cpf'
 import { CONTRACT_TYPES, uuid } from './schemas'
 
-// ---------- etapas do funil ----------
+// ---------- situação e etapas do funil ----------
 
-export const APPLICATION_STAGES = ['new', 'screening', 'interview', 'offer', 'hired', 'rejected'] as const
-export type ApplicationStage = (typeof APPLICATION_STAGES)[number]
-export const APPLICATION_STAGE_LABELS: Record<ApplicationStage, string> = {
-  new: 'Novo',
-  screening: 'Triagem',
-  interview: 'Entrevista',
-  offer: 'Proposta',
+/**
+ * Situação da candidatura. Contratado e Recusado são desfechos, não etapas do
+ * quadro; as etapas (`open`) são definidas por organização e vêm do banco.
+ */
+export const APPLICATION_STATUSES = ['open', 'hired', 'rejected'] as const
+export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
+export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
+  open: 'Em andamento',
   hired: 'Contratado',
   rejected: 'Recusado',
 }
-/** Etapas em andamento (o candidato ainda está no processo). */
-export const OPEN_STAGES = ['new', 'screening', 'interview', 'offer'] as const satisfies readonly ApplicationStage[]
+
+/** Desfecho registrado num evento do histórico (reaberta = saiu de um desfecho). */
+export const APPLICATION_OUTCOMES = ['hired', 'rejected', 'reopened'] as const
+export type ApplicationOutcome = (typeof APPLICATION_OUTCOMES)[number]
+export const APPLICATION_OUTCOME_LABELS: Record<ApplicationOutcome, string> = {
+  hired: 'Contratado',
+  rejected: 'Recusado',
+  reopened: 'Reaberta',
+}
+
+/** Etapas iniciais de toda organização. A primeira é fixa: não muda de nome nem sai. */
+export const DEFAULT_STAGES = ['Novo', 'Triagem', 'Entrevista', 'Proposta'] as const
+export const MAX_STAGES = 12
+
+const stageKey = (name: string) => name.trim().toLocaleLowerCase('pt-BR')
+
+/**
+ * Lista completa das etapas, na ordem. A primeira é sempre a etapa fixa
+ * (Novo): o nome dela é ignorado. Itens com `id` renomeiam/reordenam; sem
+ * `id`, criam; etapas que ficarem de fora são removidas.
+ */
+export const stagesInput = z.object({
+  stages: z
+    .array(z.object({ id: uuid.optional(), name: z.string().trim().min(3).max(40) }))
+    .min(1)
+    .max(MAX_STAGES)
+    .refine(
+      stages => {
+        const names = [DEFAULT_STAGES[0], ...stages.slice(1).map(s => s.name)].map(stageKey)
+        return new Set(names).size === names.length
+      },
+      { message: 'Já existe uma etapa com este nome.' },
+    ),
+})
+export type StagesInput = z.infer<typeof stagesInput>
 
 // ---------- vagas ----------
 
@@ -127,16 +161,17 @@ export type ApplicationForm = z.infer<typeof applicationForm>
 
 // ---------- funil ----------
 
-export const stageMove = z
-  .object({
-    /** `hired` só pela ação de contratar, que cria o colaborador. */
-    stage: z.enum(['new', 'screening', 'interview', 'offer', 'rejected']),
-    reason: z.string().trim().min(3).max(300).optional(),
-  })
-  .refine(m => m.stage !== 'rejected' || !!m.reason, {
-    message: 'Explique o motivo da recusa.',
-    path: ['reason'],
-  })
+/**
+ * Mover para uma etapa da organização, ou recusar com motivo. Contratar só
+ * pela ação de contratação, que cria o colaborador.
+ */
+export const stageMove = z.union([
+  z.strictObject({ stageId: uuid }),
+  z.strictObject({
+    outcome: z.literal('rejected'),
+    reason: z.string({ error: 'Explique o motivo da recusa.' }).trim().min(3).max(300),
+  }),
+])
 export type StageMove = z.infer<typeof stageMove>
 
 export const candidateFilters = z.object({
