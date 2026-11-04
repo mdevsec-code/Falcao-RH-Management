@@ -13,6 +13,7 @@ import { FileInput } from '../components/ui/file-input'
 import { ErrorState, Skeleton } from '../components/ui/layout'
 import { ApiError } from '../lib/api'
 import { cn } from '../lib/cn'
+import { cpfStatus, maskCpf } from '../lib/masks'
 import { gsap, MOTION, useGSAP } from '../lib/gsap'
 import { Paragraphs } from './career-page-view'
 import { formatSalary, postedAgo, publicApi, type PublicJobDetail, type PublicQuestion } from './public-api'
@@ -218,7 +219,17 @@ function ApplicationForm({ slug, token, job }: { slug: string; token: string; jo
   })
 
   const missingAnswer = job.questions.some(q => q.required && !answers[q.id]?.trim())
-  const valid = form.fullName.trim().length >= 3 && /\S+@\S+\.\S+/.test(form.email) && form.phone.replace(/\D/g, '').length >= 10 && form.city.trim() && form.state && file && form.privacyConsent && !missingAnswer
+  const cpf = cpfStatus(form.cpf)
+  const valid =
+    form.fullName.trim().length >= 3 &&
+    /\S+@\S+\.\S+/.test(form.email) &&
+    form.phone.replace(/\D/g, '').length >= 10 &&
+    cpf === 'valid' &&
+    form.city.trim() &&
+    form.state &&
+    file &&
+    form.privacyConsent &&
+    !missingAnswer
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -243,6 +254,25 @@ function ApplicationForm({ slug, token, job }: { slug: string; token: string; jo
         </Field>
         <Field label="Celular (WhatsApp)" required>
           {p => <Input {...p} type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} autoComplete="tel" placeholder="(81) 99999-9999" />}
+        </Field>
+        <Field
+          label="CPF"
+          required
+          hint="Digite só os números: os pontos e o traço aparecem sozinhos."
+          error={cpf === 'invalid' ? 'CPF inválido. Confira os números.' : undefined}
+        >
+          {p => (
+            <Input
+              {...p}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="000.000.000-00"
+              maxLength={14}
+              value={form.cpf}
+              onChange={e => setForm({ ...form, cpf: maskCpf(e.target.value) })}
+              className="num tracking-wide"
+            />
+          )}
         </Field>
         <div className="grid grid-cols-[1fr_92px] gap-3">
           <Field label="Cidade" required>

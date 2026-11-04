@@ -60,7 +60,8 @@ export const buildApp = async (deps: AppDeps, options: FastifyServerOptions = {}
     allowedHeaders: ['content-type', TENANT_HEADER],
   })
   await app.register(multipart, {
-    limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 10, fieldSize: 1000 },
+    // Formulário de candidatura: ~13 campos de texto (respostas em JSON até 20 kB).
+    limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 20, fieldSize: 20_000 },
   })
   await app.register(rateLimit, {
     global: true,

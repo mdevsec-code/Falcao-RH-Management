@@ -126,13 +126,20 @@ describe('Recrutamento', () => {
     talentPoolConsent: false,
     website: '',
     startedAt: Date.now(),
+    cpf: '529.982.247-25',
   }
   it('applicationForm valida consentimento, honeypot e CPF', () => {
     expect(applicationForm.safeParse(validApplication).success).toBe(true)
     expect(applicationForm.safeParse({ ...validApplication, privacyConsent: false }).success).toBe(false)
     expect(applicationForm.safeParse({ ...validApplication, website: 'x' }).success).toBe(false)
     expect(applicationForm.safeParse({ ...validApplication, cpf: '111.111.111-11' }).success).toBe(false)
-    expect(applicationForm.safeParse({ ...validApplication, cpf: '529.982.247-25' }).success).toBe(true)
+    const parsed = applicationForm.safeParse(validApplication)
+    expect(parsed.success && parsed.data.cpf).toBe('52998224725')
+  })
+  it('applicationForm exige CPF', () => {
+    const { cpf: _, ...withoutCpf } = validApplication
+    expect(applicationForm.safeParse(withoutCpf).success).toBe(false)
+    expect(applicationForm.safeParse({ ...validApplication, cpf: '' }).success).toBe(false)
   })
   it('applicationForm só aceita linkedin http/https', () => {
     expect(applicationForm.safeParse({ ...validApplication, linkedin: 'javascript:alert(1)' }).success).toBe(false)

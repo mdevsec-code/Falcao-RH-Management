@@ -151,9 +151,13 @@ export const applicationForm = z.object({
     .refine(v => v.length >= 10 && v.length <= 20, 'Telefone inválido.'),
   city: z.string().trim().min(2).max(120),
   state: stateCode,
-  cpf: optionalString
-    .refine(v => v === undefined || isValidCpf(v), 'CPF inválido')
-    .transform(v => (v === undefined ? undefined : onlyDigits(v))),
+  /** Obrigatório: identifica a pessoa no banco de talentos e já serve à contratação. */
+  cpf: z
+    .string({ error: 'Informe o CPF.' })
+    .trim()
+    .min(1, 'Informe o CPF.')
+    .refine(isValidCpf, 'CPF inválido. Confira os números.')
+    .transform(onlyDigits),
   linkedin: optionalString.refine(v => v === undefined || z.url({ protocol: /^https?$/ }).safeParse(v).success, 'Informe um link válido.'),
   /** Respostas às perguntas da vaga, por id da pergunta. */
   answers: z.record(z.string(), z.string().trim().max(2000)).default({}),

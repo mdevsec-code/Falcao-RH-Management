@@ -46,6 +46,7 @@ const validForm = (extra: Form = {}): Form => ({
   phone: '(81) 99876-5432',
   city: 'Recife',
   state: 'PE',
+  cpf: '529.982.247-25',
   privacyConsent: 'true',
   talentPoolConsent: 'true',
   website: '',
@@ -195,6 +196,15 @@ describe('candidatura pública', () => {
     expect(response.statusCode).toBe(400)
     expect(response.json().message).toBe('Envie o currículo em PDF.')
     expect(await count(candidates, org.tenant.id)).toBe(before)
+  })
+
+  it('exige CPF válido e o guarda só com números', async () => {
+    const without = await apply('vagas', jobs.main!.token, validForm({ email: 'sem.cpf@exemplo.com', cpf: '' }))
+    expect(without.statusCode).toBe(400)
+    expect(without.json().message).toBe('Informe o CPF.')
+    expect((await apply('vagas', jobs.main!.token, validForm({ email: 'cpf.errado@exemplo.com', cpf: '111.111.111-11' }))).statusCode).toBe(400)
+    const [saved] = await t.db.select({ cpf: candidates.cpf }).from(candidates).where(eq(candidates.email, 'maria.silva@exemplo.com'))
+    expect(saved!.cpf).toBe('52998224725')
   })
 
   it('valida o formulário (consentimento obrigatório)', async () => {
