@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  careerPageContent,
+  DEFAULT_CAREER_PAGE,
   APPLICATION_STATUS_LABELS,
   APPLICATION_STATUSES,
   applicationForm,
@@ -165,9 +167,45 @@ describe('Recrutamento', () => {
     expect(jobInput.safeParse({ ...validJob, questions: [{ ...choice, options: ['A', 'B'] }] }).success).toBe(true)
   })
 
+  it('perguntas existentes são identificadas pelo id ao editar a vaga', () => {
+    const question = { id: '0b8e7a1c-4f7e-4c62-9a43-6f3e7f1c2d11', kind: 'yes_no', label: 'Tem NR-35 válida?', required: true }
+    const parsed = jobInput.safeParse({ ...validJob, questions: [question] })
+    expect(parsed.success && parsed.data.questions[0]!.id).toBe(question.id)
+    expect(jobInput.safeParse({ ...validJob, questions: [{ ...question, id: 'nao-e-uuid' }] }).success).toBe(false)
+  })
+
   it('configurações aceitam os padrões de recrutamento', () => {
     const parsed = tenantSettingsInput.safeParse({ name: 'Falcão', recruitment: RECRUITMENT_DEFAULTS })
     expect(parsed.success).toBe(true)
     expect(tenantSettingsInput.safeParse({ name: 'Falcão', recruitment: { ...RECRUITMENT_DEFAULTS, talentPoolMonths: 61 } }).success).toBe(false)
+  })
+})
+
+describe('Página de vagas editável', () => {
+  it('o conteúdo padrão é válido', () => {
+    expect(careerPageContent.safeParse(DEFAULT_CAREER_PAGE).success).toBe(true)
+  })
+
+  it('recusa HTML em qualquer texto, para não abrir brecha de script na página pública', () => {
+    const withScript = { ...DEFAULT_CAREER_PAGE, about: { ...DEFAULT_CAREER_PAGE.about, body: 'Olá <script>alert(1)</script>' } }
+    expect(careerPageContent.safeParse(withScript).success).toBe(false)
+    const inFaq = { ...DEFAULT_CAREER_PAGE, faq: { enabled: true, items: [{ question: 'Pode <b>negrito</b>?', answer: 'Não.' }] } }
+    expect(careerPageContent.safeParse(inFaq).success).toBe(false)
+    const lessThan = { ...DEFAULT_CAREER_PAGE, about: { ...DEFAULT_CAREER_PAGE.about, body: 'Salário < R$ 5.000 e > R$ 2.000' } }
+    expect(careerPageContent.safeParse(lessThan).success).toBe(true)
+  })
+
+  it('benefícios só com ícones da lista e no máximo 12', () => {
+    const item = { icon: 'HeartPulse', title: 'Saúde', text: '' }
+    expect(careerPageContent.safeParse({ ...DEFAULT_CAREER_PAGE, benefits: { enabled: true, title: 'Benefícios', items: [{ ...item, icon: 'Bomb' }] } }).success).toBe(false)
+    const thirteen = Array.from({ length: 13 }, () => item)
+    expect(careerPageContent.safeParse({ ...DEFAULT_CAREER_PAGE, benefits: { enabled: true, title: 'Benefícios', items: thirteen } }).success).toBe(false)
+  })
+
+  it('links só http/https, WhatsApp só números e e-mail válido', () => {
+    const links = (l: object) => careerPageContent.safeParse({ ...DEFAULT_CAREER_PAGE, links: l }).success
+    expect(links({ instagram: 'javascript:alert(1)' })).toBe(false)
+    expect(links({ site: 'https://falcao.com.br', whatsapp: '(81) 99999-0000', email: 'rh@falcao.com.br' })).toBe(true)
+    expect(links({ email: 'nao-e-email' })).toBe(false)
   })
 })

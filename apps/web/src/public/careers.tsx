@@ -38,7 +38,13 @@ export function CareersPage() {
           </div>
         ) : (
           <>
-            <Hero title={hero.title} subtitle={hero.subtitle} jobs={data?.jobs.length} cities={cities} imageUrl={hero.imageId ? publicApi.assetUrl(empresa, hero.imageId) : null} />
+            {data ? (
+              <Hero title={hero.title} subtitle={hero.subtitle} jobs={data.jobs.length} cities={cities} imageUrl={hero.imageId ? publicApi.assetUrl(empresa, hero.imageId) : null} />
+            ) : (
+              <div className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 sm:pt-10">
+                <Skeleton className="h-[420px] rounded-xl" />
+              </div>
+            )}
             <JobList slug={empresa} jobs={data?.jobs} loading={query.isPending} />
             {data?.page && <CareerSections content={data.page} stats={{ jobs: data.jobs.length, cities }} />}
           </>
@@ -49,7 +55,7 @@ export function CareersPage() {
 }
 
 /** Capa: bloco escuro da marca, título montado por caractere e o falcão em paralaxe. */
-function Hero({ title, subtitle, jobs, cities, imageUrl }: { title: string; subtitle: string; jobs?: number; cities: number; imageUrl: string | null }) {
+export function Hero({ title, subtitle, jobs, cities, imageUrl }: { title: string; subtitle: string; jobs?: number; cities: number; imageUrl: string | null }) {
   const ref = useRef<HTMLElement>(null)
   useGSAP(
     () => {

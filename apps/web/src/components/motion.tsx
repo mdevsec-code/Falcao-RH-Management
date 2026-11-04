@@ -72,7 +72,8 @@ export function SplitTitle({
     { dependencies: [children], scope: ref },
   )
   return (
-    <Tag ref={ref} className={className}>
+    // `key`: texto novo remonta o elemento; o SplitText anterior restauraria o texto antigo.
+    <Tag key={children} ref={ref} className={className}>
       {children}
     </Tag>
   )
@@ -223,7 +224,7 @@ export function RevealScope({ routeKey, className, children }: { routeKey: strin
         let frame = 0
 
         const batch = (selector: string, from: gsap.TweenVars, to: gsap.TweenVars, batchMax: number) => {
-          const fresh = gsap.utils.toArray<HTMLElement>(selector, root).filter(el => !seen.has(el))
+          const fresh = gsap.utils.toArray<HTMLElement>(selector, root).filter(el => !seen.has(el) && !el.closest('[data-no-reveal]'))
           if (fresh.length === 0) return false
           fresh.forEach(el => seen.add(el))
           gsap.set(fresh, from)

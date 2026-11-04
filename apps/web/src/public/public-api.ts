@@ -2,9 +2,11 @@
  * Cliente da página pública de vagas. Sem sessão e sem cookies: nada daqui
  * depende do login do sistema interno.
  */
-import type { CONTRACT_TYPES, WorkMode } from '@falcao-rh/contracts'
+import type { CareerPageContent, CONTRACT_TYPES, WorkMode } from '@falcao-rh/contracts'
 
 import { ApiError } from '../lib/api'
+
+export type { CareerPageContent }
 
 type ContractType = (typeof CONTRACT_TYPES)[number]
 
@@ -25,15 +27,6 @@ export type PublicJob = {
 
 export type PublicQuestion = { id: string; kind: 'text' | 'yes_no' | 'choice'; label: string; options: string[] | null; required: boolean }
 export type PublicJobDetail = PublicJob & { questions: PublicQuestion[]; accepting: boolean }
-
-/** Conteúdo institucional publicado pelo RH (editor da página de vagas). */
-export type CareerPageContent = {
-  hero: { enabled: boolean; title: string; subtitle: string; imageId: string | null }
-  about: { enabled: boolean; title: string; body: string; imageIds: string[] }
-  benefits: { enabled: boolean; title: string; items: { icon: string; title: string; text: string }[] }
-  faq: { enabled: boolean; items: { question: string; answer: string }[] }
-  links: { instagram?: string; linkedin?: string; facebook?: string; site?: string; whatsapp?: string; email?: string }
-}
 
 export type CareersData = { company: { name: string }; page: CareerPageContent | null; jobs: PublicJob[] }
 

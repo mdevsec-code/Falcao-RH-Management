@@ -91,6 +91,8 @@ const optionalString = z
 
 export const jobQuestionInput = z
   .object({
+    /** Pergunta existente (editar sem perder respostas); ausente = nova. */
+    id: uuid.optional(),
     kind: z.enum(QUESTION_KINDS),
     label: z.string().trim().min(3).max(200),
     options: z.array(z.string().trim().min(1).max(100)).min(2).max(10).optional(),
@@ -202,3 +204,73 @@ export const recruitmentSettingsInput = z.object({
   hiredMessage: z.string().trim().min(20).max(1000),
 })
 export type RecruitmentSettings = z.infer<typeof recruitmentSettingsInput>
+
+// ---------- página oficial de vagas (editável pelo RH) ----------
+
+/** Ícones permitidos nos cartões de benefícios (nomes do lucide). */
+export const BENEFIT_ICONS = [
+  'HeartPulse',
+  'Bus',
+  'Utensils',
+  'GraduationCap',
+  'ShieldCheck',
+  'HardHat',
+  'Wallet',
+  'Smile',
+  'Clock',
+  'TrendingUp',
+  'Users',
+  'Home',
+] as const
+export type BenefitIcon = (typeof BENEFIT_ICONS)[number]
+
+/** Texto simples: recusa qualquer marcação (`<` seguido de letra, `/` ou `!`). */
+const plain = (min: number, max: number) =>
+  z
+    .string()
+    .trim()
+    .min(min)
+    .max(max)
+    .refine(v => !/<[a-zA-Z/!]/.test(v), 'Use só texto, sem marcações HTML.')
+
+const httpUrl = z.url({ protocol: /^https?$/, error: 'Informe um link que comece com https://' })
+const optionalLink = <T extends z.ZodType>(schema: T) =>
+  z.preprocess(v => (typeof v === 'string' && v.trim() === '' ? undefined : v), schema.optional())
+
+export const careerPageContent = z.object({
+  hero: z.object({ enabled: z.boolean(), title: plain(3, 80), subtitle: plain(0, 200), imageId: uuid.nullable() }),
+  about: z.object({ enabled: z.boolean(), title: plain(3, 80), body: plain(0, 3000), imageIds: z.array(uuid).max(4) }),
+  benefits: z.object({
+    enabled: z.boolean(),
+    title: plain(3, 80),
+    items: z.array(z.object({ icon: z.enum(BENEFIT_ICONS), title: plain(2, 60), text: plain(0, 240) })).max(12),
+  }),
+  faq: z.object({ enabled: z.boolean(), items: z.array(z.object({ question: plain(5, 200), answer: plain(2, 1500) })).max(15) }),
+  links: z.object({
+    instagram: optionalLink(httpUrl),
+    linkedin: optionalLink(httpUrl),
+    facebook: optionalLink(httpUrl),
+    site: optionalLink(httpUrl),
+    whatsapp: optionalLink(
+      z
+        .string()
+        .transform(v => v.replace(/\D/g, ''))
+        .refine(v => v.length >= 10 && v.length <= 13, 'WhatsApp com DDD, só números.'),
+    ),
+    email: optionalLink(z.email('E-mail inválido.')),
+  }),
+})
+export type CareerPageContent = z.infer<typeof careerPageContent>
+
+export const DEFAULT_CAREER_PAGE: CareerPageContent = {
+  hero: {
+    enabled: true,
+    title: 'Construa sua carreira na Falcão',
+    subtitle: 'Vagas abertas em obras e no escritório. Venha fazer parte.',
+    imageId: null,
+  },
+  about: { enabled: true, title: 'Sobre a Falcão', body: '', imageIds: [] },
+  benefits: { enabled: false, title: 'Por que trabalhar aqui', items: [] },
+  faq: { enabled: true, items: [] },
+  links: {},
+}
