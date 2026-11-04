@@ -300,3 +300,36 @@ export type JobListItem = {
 export type JobDetail = JobListItem & { questions: JobQuestion[] }
 
 export type RecruitmentStage = { id: string; name: string; position: number; isInitial: boolean; openApplications: number }
+
+export type FileScanStatus = 'pending' | 'clean' | 'infected'
+
+export type BoardCard = {
+  id: string
+  stageId: string | null
+  status: 'open' | 'hired' | 'rejected'
+  rating: number | null
+  createdAt: string
+  candidate: { id: string; fullName: string; city: string; state: string }
+  tags: string[]
+  fileStatus: FileScanStatus | null
+}
+
+export type JobBoard = { stages: { id: string; name: string; position: number }[]; cards: BoardCard[]; rejected: BoardCard[] }
+
+export type ApplicationDetail = {
+  id: string
+  jobId: string
+  jobTitle: string
+  status: 'open' | 'hired' | 'rejected'
+  stageId: string | null
+  rating: number | null
+  rejectionReason: string | null
+  talentPoolConsent: boolean
+  createdAt: string
+  candidate: { id: string; fullName: string; email: string; phone: string; city: string; state: string; linkedin: string | null; tags: string[]; cpf?: string | null }
+  answers: { questionId: string; label: string; value: string }[]
+  events: { id: string; fromLabel: string | null; toLabel: string | null; outcome: 'hired' | 'rejected' | 'reopened' | null; note: string | null; actorName: string | null; createdAt: string }[]
+  notes: { id: string; body: string; authorName: string | null; createdAt: string }[]
+  file: { id: string; filename: string; sizeBytes: number; scanStatus: FileScanStatus; createdAt: string } | null
+  otherApplications?: { id: string; jobTitle: string; stage: string; createdAt: string }[]
+}

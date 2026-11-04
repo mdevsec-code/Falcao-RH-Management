@@ -114,6 +114,13 @@ const recruitmentRoute = createRoute({
   component: lazyRouteComponent(() => import('./pages/recruitment'), 'RecruitmentPage'),
 })
 
+const jobBoardRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/recrutamento/vagas/$id',
+  beforeLoad: guard('recruitment.read'),
+  component: lazyRouteComponent(() => import('./pages/job-board'), 'JobBoardPage'),
+})
+
 const careersEditorRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/recrutamento/pagina-de-vagas',
@@ -192,6 +199,7 @@ const routeTree = rootRoute.addChildren([
     structureRoute,
     recruitmentRoute,
     careersEditorRoute,
+    jobBoardRoute,
     portalRoute,
     accessRoute,
     accountRoute,

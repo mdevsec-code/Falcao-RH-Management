@@ -203,9 +203,9 @@ function JobRow({ job, stages, canManage, onEdit }: { job: JobListItem; stages: 
       <span className="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-brand opacity-0 transition-opacity group-hover/row:opacity-100" aria-hidden />
       <div className="min-w-0 flex-1 basis-64">
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={canManage ? onEdit : undefined} className="truncate text-left text-[15.5px] font-semibold text-ink decoration-brand decoration-2 underline-offset-4 hover:underline">
+          <Link to="/recrutamento/vagas/$id" params={{ id: job.id }} className="truncate text-[15.5px] font-semibold text-ink decoration-brand decoration-2 underline-offset-4 hover:underline">
             {job.title}
-          </button>
+          </Link>
           <Badge tone={s.tone}>{s.label}</Badge>
           {job.visibility === 'unlisted' && (
             <span className="inline-flex items-center gap-1 text-[12px] text-steel">

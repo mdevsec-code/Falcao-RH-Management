@@ -167,7 +167,7 @@ function Breadcrumb() {
             {item.label}
           </Link>
           <ChevronRight className="size-3.5 text-steel-soft" aria-hidden />
-          <span className="font-medium text-ink">Ficha</span>
+          <span className="font-medium text-ink">{path.startsWith('/recrutamento/vagas/') ? 'Vaga' : 'Ficha'}</span>
         </>
       ) : (
         <span className="font-medium text-ink">{item.label}</span>
