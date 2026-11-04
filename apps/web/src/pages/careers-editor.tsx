@@ -5,6 +5,7 @@ import {
   CircleAlert,
   CloudCheck,
   ExternalLink,
+  GripVertical,
   Eye,
   HelpCircle,
   Image as ImageIcon,
@@ -19,18 +20,19 @@ import {
   Trash2,
   Type,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
-import { BENEFIT_ICONS, careerPageContent, type BenefitIcon, type CareerPageContent } from '@falcao-rh/contracts'
+import { BENEFIT_EMOJIS, careerPageContent, suggestBenefitEmoji, type CareerPageContent } from '@falcao-rh/contracts'
 
 import { Button } from '../components/ui/button'
 import { Field, Input, Textarea } from '../components/ui/field'
 import { ErrorState, PageHeader, Panel, Skeleton } from '../components/ui/layout'
 import { api, ApiError } from '../lib/api'
 import { cn } from '../lib/cn'
+import { Draggable, Flip, gsap, reducedMotion, useGSAP } from '../lib/gsap'
 import { useMe } from '../lib/session'
-import { BENEFIT_ICON_MAP, CareerSections } from '../public/career-page-view'
+import { CareerSections } from '../public/career-page-view'
 import { Hero } from '../public/careers'
 
 type EditorState = { draft: CareerPageContent; published: CareerPageContent | null; publishedAt: string | null; previewUrl: string }
@@ -325,51 +327,141 @@ function Counter({ value, max }: { value: string; max: number }) {
 const MAX_BENEFITS = 12
 const MAX_FAQ = 15
 
+/**
+ * Benefícios: arrastar pela alça reordena (GSAP Draggable + Flip); ↑/↓ fazem o
+ * mesmo pelo teclado. O emoji é sugerido pelo nome até a pessoa escolher outro.
+ */
 function BenefitsEditor({ items, onChange }: { items: CareerPageContent['benefits']['items']; onChange: (items: CareerPageContent['benefits']['items']) => void }) {
+  const root = useRef<HTMLDivElement>(null)
+  const flipState = useRef<Flip.FlipState | null>(null)
+  // Chaves estáveis por item (a ordem muda; o conteúdo vai junto).
+  const [keys, setKeys] = useState(() => items.map(() => crypto.randomUUID()))
+  if (keys.length !== items.length) setKeys(items.map((_, i) => keys[i] ?? crypto.randomUUID()))
+
   const set = (index: number, patch: Partial<(typeof items)[number]>) => onChange(items.map((item, i) => (i === index ? { ...item, ...patch } : item)))
+  const rename = (index: number, title: string) => {
+    const item = items[index]!
+    const auto = item.icon === suggestBenefitEmoji(item.title) || item.icon === '✨'
+    set(index, { title, ...(auto ? { icon: suggestBenefitEmoji(title) } : {}) })
+  }
+  const reorder = <T,>(list: T[], from: number, to: number) => {
+    const next = [...list]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved!)
+    return next
+  }
+  const move = (from: number, to: number) => {
+    if (to < 0 || to >= items.length || from === to) return
+    if (root.current && !reducedMotion()) flipState.current = Flip.getState(root.current.querySelectorAll('[data-benefit]'))
+    setKeys(reorder(keys, from, to))
+    onChange(reorder(items, from, to))
+  }
+  const remove = (index: number) => {
+    setKeys(keys.filter((_, i) => i !== index))
+    onChange(items.filter((_, i) => i !== index))
+  }
+
+  useLayoutEffect(() => {
+    if (!flipState.current) return
+    Flip.from(flipState.current, { duration: 0.45, ease: 'falcon' })
+    flipState.current = null
+  }, [keys])
+
+  // Arrastar verticalmente pela alça; ao soltar, a posição define a nova ordem.
+  useGSAP(
+    () => {
+      if (!root.current) return
+      const cards = gsap.utils.toArray<HTMLElement>('[data-benefit]', root.current)
+      const draggables = cards.map((el, index) =>
+        Draggable.create(el, {
+          type: 'y',
+          trigger: el.querySelector('[data-grip]'),
+          bounds: root.current,
+          onPress() {
+            gsap.set(el, { zIndex: 20, position: 'relative' })
+          },
+          onDragStart() {
+            gsap.to(el, { scale: 1.02, boxShadow: 'var(--shadow-pop)', duration: 0.2 })
+          },
+          onRelease() {
+            const center = el.getBoundingClientRect().top + el.offsetHeight / 2
+            const target = cards.filter(other => other !== el && other.getBoundingClientRect().top + other.offsetHeight / 2 < center).length
+            gsap.to(el, { scale: 1, boxShadow: '', duration: 0.2, clearProps: 'zIndex' })
+            if (target !== index) {
+              gsap.set(el, { y: 0 })
+              move(index, target)
+            } else gsap.to(el, { y: 0, duration: 0.35, ease: 'falcon' })
+          },
+        })[0]!,
+      )
+      return () => draggables.forEach(d => d.kill())
+    },
+    { scope: root, dependencies: [keys.join()], revertOnUpdate: true },
+  )
+
   return (
     <div className="flex flex-col gap-3">
-      {items.map((item, index) => {
-        const Icon = BENEFIT_ICON_MAP[item.icon]!
-        return (
-          <div key={index} className="rounded-md border border-line bg-sunken/60 p-4">
+      <div ref={root} className="flex flex-col gap-3">
+        {items.map((item, index) => (
+          <div key={keys[index]} data-benefit data-flip-id={keys[index]} className="rounded-md border border-line bg-sunken p-4">
             <div className="flex items-start gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-night text-brand">
-                <Icon className="size-[18px]" aria-hidden />
+              <button
+                type="button"
+                data-grip
+                aria-label="Arrastar para mudar a ordem"
+                title="Arraste para mudar a ordem"
+                className="mt-2 flex h-8 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-[5px] text-steel-soft hover:bg-paper hover:text-ink active:cursor-grabbing"
+              >
+                <GripVertical className="size-4" aria-hidden />
+              </button>
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-[10px] bg-paper text-[26px] ring-1 ring-line" aria-hidden>
+                {item.icon}
               </span>
               <div className="flex min-w-0 flex-1 flex-col gap-2">
-                <Input value={item.title} maxLength={60} placeholder="Ex.: Plano de saúde" aria-label="Título do benefício" onChange={e => set(index, { title: e.target.value })} />
+                <Input value={item.title} maxLength={60} placeholder="Ex.: Plano de saúde" aria-label="Título do benefício" onChange={e => rename(index, e.target.value)} />
                 <Input value={item.text} maxLength={240} placeholder="Descrição curta (opcional)" aria-label="Descrição do benefício" onChange={e => set(index, { text: e.target.value })} />
               </div>
-              <Button size="icon" variant="ghost" aria-label="Remover benefício" onClick={() => onChange(items.filter((_, i) => i !== index))}>
-                <Trash2 className="size-4" />
-              </Button>
+              <div className="flex flex-col gap-0.5">
+                <Button size="icon" variant="ghost" aria-label="Subir" disabled={index === 0} onClick={() => move(index, index - 1)}>
+                  <ArrowUp className="size-4" />
+                </Button>
+                <Button size="icon" variant="ghost" aria-label="Descer" disabled={index === items.length - 1} onClick={() => move(index, index + 1)}>
+                  <ArrowDown className="size-4" />
+                </Button>
+                <Button size="icon" variant="ghost" aria-label="Remover benefício" onClick={() => remove(index)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-1" role="radiogroup" aria-label="Ícone">
-              {BENEFIT_ICONS.map(name => {
-                const Option = BENEFIT_ICON_MAP[name]!
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    role="radio"
-                    aria-checked={item.icon === name}
-                    aria-label={name}
-                    onClick={() => set(index, { icon: name as BenefitIcon })}
-                    className={cn(
-                      'flex size-8 items-center justify-center rounded-[7px] transition-all',
-                      item.icon === name ? 'bg-night text-brand shadow-card' : 'text-steel hover:bg-paper hover:text-ink',
-                    )}
-                  >
-                    <Option className="size-4" aria-hidden />
-                  </button>
-                )
-              })}
+            <div className="mt-3 flex flex-wrap gap-0.5 pl-8" role="radiogroup" aria-label="Emoji do benefício">
+              {BENEFIT_EMOJIS.map(emoji => (
+                <button
+                  key={emoji}
+                  type="button"
+                  role="radio"
+                  aria-checked={item.icon === emoji}
+                  aria-label={`Usar ${emoji}`}
+                  onClick={() => set(index, { icon: emoji })}
+                  className={cn(
+                    'flex size-8 items-center justify-center rounded-[7px] text-[17px] transition-all',
+                    item.icon === emoji ? 'bg-paper shadow-card ring-2 ring-brand' : 'opacity-70 hover:bg-paper hover:opacity-100',
+                  )}
+                >
+                  {emoji}
+                </button>
+              ))}
             </div>
           </div>
-        )
-      })}
-      <Button disabled={items.length >= MAX_BENEFITS} onClick={() => onChange([...items, { icon: 'Smile', title: '', text: '' }])} className="self-start">
+        ))}
+      </div>
+      <Button
+        disabled={items.length >= MAX_BENEFITS}
+        onClick={() => {
+          setKeys([...keys, crypto.randomUUID()])
+          onChange([...items, { icon: '✨', title: '', text: '' }])
+        }}
+        className="self-start"
+      >
         <Plus className="size-4" aria-hidden /> Adicionar benefício
         <span className="text-steel-soft">
           {items.length}/{MAX_BENEFITS}

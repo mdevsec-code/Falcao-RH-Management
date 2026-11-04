@@ -1,44 +1,16 @@
 import {
-  Bus,
   ChevronDown,
-  Clock,
   Globe,
-  GraduationCap,
-  HardHat,
-  HeartPulse,
-  Home,
   Camera,
   BriefcaseBusiness,
   Share2,
   Mail,
   MessageCircle,
-  ShieldCheck,
-  Smile,
-  TrendingUp,
-  Users,
-  Utensils,
-  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import type { CareerPageContent } from './public-api'
-
-/** Ícones permitidos nos cartões de benefícios (lista fixa do editor). */
-export const BENEFIT_ICON_MAP: Record<string, LucideIcon> = {
-  HeartPulse,
-  Bus,
-  Utensils,
-  GraduationCap,
-  ShieldCheck,
-  HardHat,
-  Wallet,
-  Smile,
-  Clock,
-  TrendingUp,
-  Users,
-  Home,
-}
 
 /** Texto simples em parágrafos (quebra dupla) — nunca HTML. */
 export function Paragraphs({ text, className }: { text: string; className?: string }) {
@@ -118,11 +90,10 @@ export function CareerSections({ content, stats }: { content: CareerPageContent;
           <Section eyebrow="Benefícios" title={benefits.title}>
             <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {benefits.items.map(item => {
-                const Icon = BENEFIT_ICON_MAP[item.icon] ?? Smile
                 return (
                   <li key={item.title} className="surface group p-6 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lift">
-                    <span className="flex size-11 items-center justify-center rounded-[11px] bg-night text-brand transition-transform duration-500 group-hover:-rotate-6">
-                      <Icon className="size-5" aria-hidden />
+                    <span className="flex size-12 items-center justify-center rounded-[12px] bg-sunken text-[26px] ring-1 ring-line transition-transform duration-500 group-hover:-rotate-6 group-hover:scale-110" aria-hidden>
+                      {item.icon}
                     </span>
                     <p className="mt-5 font-semibold text-ink">{item.title}</p>
                     {item.text && <p className="mt-1 text-[14px] leading-relaxed text-steel">{item.text}</p>}

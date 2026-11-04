@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   careerPageContent,
+  suggestBenefitEmoji,
   DEFAULT_CAREER_PAGE,
   APPLICATION_STATUS_LABELS,
   APPLICATION_STATUSES,
@@ -204,11 +205,27 @@ describe('Página de vagas editável', () => {
     expect(careerPageContent.safeParse(lessThan).success).toBe(true)
   })
 
-  it('benefícios só com ícones da lista e no máximo 12', () => {
-    const item = { icon: 'HeartPulse', title: 'Saúde', text: '' }
-    expect(careerPageContent.safeParse({ ...DEFAULT_CAREER_PAGE, benefits: { enabled: true, title: 'Benefícios', items: [{ ...item, icon: 'Bomb' }] } }).success).toBe(false)
-    const thirteen = Array.from({ length: 13 }, () => item)
-    expect(careerPageContent.safeParse({ ...DEFAULT_CAREER_PAGE, benefits: { enabled: true, title: 'Benefícios', items: thirteen } }).success).toBe(false)
+  it('cada benefício tem um emoji (um só) e são no máximo 12', () => {
+    const page = (icon: string, count = 1) =>
+      careerPageContent.safeParse({ ...DEFAULT_CAREER_PAGE, benefits: { enabled: true, title: 'Benefícios', items: Array.from({ length: count }, () => ({ icon, title: 'Saúde', text: '' })) } }).success
+    expect(page('🩺')).toBe(true)
+    expect(page('🍽️')).toBe(true)
+    expect(page('HeartPulse')).toBe(false)
+    expect(page('🩺🩺')).toBe(false)
+    expect(page('<b>')).toBe(false)
+    expect(page('🩺', 13)).toBe(false)
+  })
+
+  it('sugere um emoji condizente com o nome do benefício', () => {
+    expect(suggestBenefitEmoji('Plano de saúde')).toBe('🩺')
+    expect(suggestBenefitEmoji('Odontológico')).toBe('🦷')
+    expect(suggestBenefitEmoji('Vale-alimentação')).toBe('🛒')
+    expect(suggestBenefitEmoji('Refeição no canteiro')).toBe('🍽️')
+    expect(suggestBenefitEmoji('Salário compatível')).toBe('💰')
+    expect(suggestBenefitEmoji('PPR')).toBe('📈')
+    expect(suggestBenefitEmoji('Transporte fretado')).toBe('🚌')
+    expect(suggestBenefitEmoji('Seguro de vida')).toBe('🛡️')
+    expect(suggestBenefitEmoji('Algo totalmente novo')).toBe('✨')
   })
 
   it('links só http/https, WhatsApp só números e e-mail válido', () => {

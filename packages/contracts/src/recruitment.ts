@@ -216,22 +216,48 @@ export type RecruitmentSettings = z.infer<typeof recruitmentSettingsInput>
 
 // ---------- página oficial de vagas (editável pelo RH) ----------
 
-/** Ícones permitidos nos cartões de benefícios (nomes do lucide). */
-export const BENEFIT_ICONS = [
-  'HeartPulse',
-  'Bus',
-  'Utensils',
-  'GraduationCap',
-  'ShieldCheck',
-  'HardHat',
-  'Wallet',
-  'Smile',
-  'Clock',
-  'TrendingUp',
-  'Users',
-  'Home',
+/**
+ * Emojis dos benefícios: sugestão por palavra-chave do nome (a primeira que
+ * casar vence) e a paleta oferecida no editor. Qualquer emoji único é aceito.
+ */
+const BENEFIT_EMOJI_RULES: [RegExp, string][] = [
+  [/odonto|dent/i, '🦷'],
+  [/sa[uú]de|m[eé]dic|hospital/i, '🩺'],
+  [/refei[cç]|almo[cç]o|restaurante/i, '🍽️'],
+  [/aliment|mercado|cesta/i, '🛒'],
+  [/transporte|fretado|[oô]nibus|vt\b/i, '🚌'],
+  [/combust[ií]vel|carro|estacionamento/i, '🚗'],
+  [/ppr|plr|participa[cç][aã]o|resultado|b[oô]nus/i, '📈'],
+  [/sal[aá]rio|remunera|pagamento|13/i, '💰'],
+  [/seguro|vida/i, '🛡️'],
+  [/seguran[cç]a|epi|nr-?\d*/i, '🦺'],
+  [/curso|treinamento|capacita|educa|faculdade|bolsa/i, '🎓'],
+  [/academia|gympass|wellhub|esporte/i, '💪'],
+  [/creche|filho|crian[cç]a/i, '👶'],
+  [/f[eé]rias|folga|day ?off/i, '🏖️'],
+  [/anivers[aá]rio/i, '🎂'],
+  [/hor[aá]rio|flex[ií]vel|jornada|banco de horas/i, '🕒'],
+  [/home ?office|remoto|h[ií]brido/i, '🏠'],
+  [/psic|terapia|bem-estar|emocional/i, '🧠'],
+  [/farm[aá]cia|medicamento/i, '💊'],
+  [/carreira|crescimento|promo[cç]/i, '🚀'],
+  [/uniforme|fardamento/i, '👷'],
+  [/moradia|alojamento|hospedagem/i, '🏡'],
+]
+
+export const BENEFIT_EMOJIS = [
+  '🩺', '🦷', '🍽️', '🛒', '🚌', '🚗', '💰', '📈', '🛡️', '🦺', '🎓', '💪',
+  '👶', '🏖️', '🎂', '🕒', '🏠', '🧠', '💊', '🚀', '👷', '🏡', '🎁', '✨',
 ] as const
-export type BenefitIcon = (typeof BENEFIT_ICONS)[number]
+
+export const suggestBenefitEmoji = (title: string) => BENEFIT_EMOJI_RULES.find(([pattern]) => pattern.test(title))?.[1] ?? '✨'
+
+/** Um único emoji (com variação, tom de pele ou junções), nada de texto. */
+const singleEmoji = z
+  .string()
+  .trim()
+  .max(16)
+  .regex(/^\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier}|‍\p{Extended_Pictographic}️?)*$/u, 'Escolha um emoji para o benefício.')
 
 /** Texto simples: recusa qualquer marcação (`<` seguido de letra, `/` ou `!`). */
 const plain = (min: number, max: number) =>
@@ -252,7 +278,7 @@ export const careerPageContent = z.object({
   benefits: z.object({
     enabled: z.boolean(),
     title: plain(3, 80),
-    items: z.array(z.object({ icon: z.enum(BENEFIT_ICONS), title: plain(2, 60), text: plain(0, 240) })).max(12),
+    items: z.array(z.object({ icon: singleEmoji, title: plain(2, 60), text: plain(0, 240) })).max(12),
   }),
   faq: z.object({ enabled: z.boolean(), items: z.array(z.object({ question: plain(5, 200), answer: plain(2, 1500) })).max(15) }),
   links: z.object({
