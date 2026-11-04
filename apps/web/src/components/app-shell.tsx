@@ -17,7 +17,7 @@ import type { AppNotification } from '../lib/types'
 import { INTRO_FLAG } from '../pages/login'
 import { CommandPalette } from './command-palette'
 import { BackToTop, RevealScope, useIndicator } from './motion'
-import { NAV, type NavItem } from './navigation'
+import { activeNavItem, NAV, type NavItem } from './navigation'
 import { Avatar } from './ui/layout'
 
 const COLLAPSE_KEY = 'falcao-rh:sidebar'
@@ -44,7 +44,7 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
 }
 
 const usePath = () => useRouterState({ select: state => state.location.pathname })
-const isActive = (path: string, item: NavItem) => path === item.to || path.startsWith(`${item.to}/`)
+const isActive = (path: string, item: NavItem) => activeNavItem(path)?.to === item.to
 
 function Navigation({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
   const me = useMe()
@@ -54,7 +54,7 @@ function Navigation({ onNavigate, collapsed }: { onNavigate?: () => void; collap
   const sections = (['Gestão', 'Pessoal', 'Administração'] as const)
     .map(section => ({ section, items: NAV.filter(item => item.section === section && visible(item)) }))
     .filter(group => group.items.length > 0)
-  const active = NAV.find(item => isActive(path, item))?.to
+  const active = activeNavItem(path)?.to
   useIndicator(ref, `${active}-${collapsed}`)
 
   return (
@@ -154,7 +154,7 @@ function Sidebar({ onNavigate, collapsed, onToggle }: { onNavigate?: () => void;
 
 function Breadcrumb() {
   const path = usePath()
-  const item = NAV.find(entry => isActive(path, entry))
+  const item = activeNavItem(path)
   if (!item) return null
   const nested = path !== item.to
   return (

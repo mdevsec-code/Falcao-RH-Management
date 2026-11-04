@@ -1,4 +1,5 @@
 import {
+  BriefcaseBusiness,
   Building2,
   CalendarCheck,
   FileText,
@@ -31,6 +32,7 @@ export const NAV: NavItem[] = [
   { to: '/colaboradores', label: 'Colaboradores', description: 'Cadastro, fichas e histórico', icon: Users, permission: 'employees.read', section: 'Gestão' },
   { to: '/solicitacoes', label: 'Solicitações', description: 'Aprovações, férias e calendário', icon: CalendarCheck, permission: 'requests.read', section: 'Gestão' },
   { to: '/documentos', label: 'Documentos', description: 'Arquivos, validade e versões', icon: FileText, permission: 'documents.read', section: 'Gestão' },
+  { to: '/recrutamento', label: 'Recrutamento', description: 'Vagas, candidatos e publicação', icon: BriefcaseBusiness, permission: 'recruitment.read', section: 'Gestão' },
   { to: '/recrutamento/pagina-de-vagas', label: 'Página de vagas', description: 'Editar a página pública de recrutamento', icon: Globe, permission: 'recruitment.manage', section: 'Gestão' },
   { to: '/estrutura', label: 'Estrutura', description: 'Organograma, departamentos e cargos', icon: Building2, permission: 'org.read', section: 'Gestão' },
   { to: '/meu-cadastro', label: 'Meu cadastro', description: 'Seus dados e documentos', icon: IdCard, permission: 'self.read', section: 'Pessoal', needsEmployee: true },
@@ -39,3 +41,7 @@ export const NAV: NavItem[] = [
   { to: '/acessos', label: 'Usuários e acessos', description: 'Convites e perfis', icon: ShieldCheck, permission: 'users.manage', section: 'Administração' },
   { to: '/configuracoes', label: 'Configurações', description: 'Organização, segurança e aprovações', icon: Settings, permission: 'settings.manage', section: 'Administração' },
 ]
+
+/** Item do menu da rota atual: o mais específico (`/recrutamento/pagina-de-vagas` vence `/recrutamento`). */
+export const activeNavItem = (path: string) =>
+  NAV.filter(item => path === item.to || path.startsWith(`${item.to}/`)).sort((a, b) => b.to.length - a.to.length)[0]

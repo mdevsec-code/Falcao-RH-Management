@@ -259,3 +259,44 @@ export type ImportReport = {
   rows: { line: number; fullName: string; registration: string; errors: string[] }[]
   toCreate: { departments: string[]; positions: string[]; units: string[] }
 }
+
+// ---------- recrutamento ----------
+
+export type JobStatus = 'draft' | 'published' | 'paused' | 'closed'
+
+export type JobQuestion = { id: string; kind: 'text' | 'yes_no' | 'choice'; label: string; options: string[] | null; required: boolean }
+
+export type JobListItem = {
+  id: string
+  title: string
+  departmentId: string | null
+  departmentName: string | null
+  unitId: string | null
+  positionId: string | null
+  contractType: ContractType
+  city: string
+  state: string | null
+  workMode: 'onsite' | 'site' | 'hybrid'
+  salaryMin: number | null
+  salaryMax: number | null
+  showSalary: boolean
+  description: string
+  requirements: string
+  benefits: string
+  openings: number
+  hiredCount: number
+  managerUserId: string | null
+  managerName: string | null
+  visibility: 'public' | 'unlisted'
+  status: JobStatus
+  publishedAt: string | null
+  closedAt: string | null
+  createdAt: string
+  shareUrl: string
+  counts: { stages: Record<string, number>; hired: number; rejected: number }
+  total: number
+}
+
+export type JobDetail = JobListItem & { questions: JobQuestion[] }
+
+export type RecruitmentStage = { id: string; name: string; position: number; isInitial: boolean; openApplications: number }
