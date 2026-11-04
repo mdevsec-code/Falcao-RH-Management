@@ -55,6 +55,9 @@ export function JobPage() {
 
 function JobDetail({ slug, token, job }: { slug: string; token: string; job: PublicJobDetail }) {
   const salary = formatSalary(job.salary)
+  // Emojis dos benefícios vêm da página de vagas (a mesma consulta da lista, em cache).
+  const careers = useQuery({ queryKey: ['careers', slug], queryFn: () => publicApi.careers(slug) })
+  const benefitEmojis = new Map((careers.data?.page?.benefits.items ?? []).map(b => [b.title, b.icon]))
   const share = async () => {
     const url = window.location.href
     try {
@@ -116,7 +119,7 @@ function JobDetail({ slug, token, job }: { slug: string; token: string; job: Pub
           )}
           {job.benefits.trim() && (
             <TextBlock title="Benefícios">
-              <Bullets text={job.benefits} />
+              <Bullets text={job.benefits} emojis={benefitEmojis} />
             </TextBlock>
           )}
         </article>
@@ -154,22 +157,31 @@ function TextBlock({ title, children }: { title: string; children: ReactNode }) 
   )
 }
 
-/** Uma linha do texto do RH = um item. */
-function Bullets({ text }: { text: string }) {
+/** Uma linha do texto do RH = um item. Com `emojis`, o benefício leva o emoji da página de vagas. */
+function Bullets({ text, emojis }: { text: string; emojis?: Map<string, string> }) {
   return (
     <ul className="flex flex-col gap-2.5">
       {text
         .split('\n')
         .map(line => line.replace(/^[-•*]\s*/, '').trim())
         .filter(Boolean)
-        .map(line => (
-          <li key={line} className="flex gap-3 text-[15px] leading-relaxed text-ink-soft">
-            <span className="mt-1 flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink">
-              <Check className="size-3" strokeWidth={3} aria-hidden />
-            </span>
-            {line}
-          </li>
-        ))}
+        .map(line => {
+          const emoji = emojis?.get(line)
+          return (
+            <li key={line} className="flex items-start gap-3 text-[15px] leading-relaxed text-ink-soft">
+              {emoji ? (
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-[8px] bg-sunken text-[16px] ring-1 ring-line" aria-hidden>
+                  {emoji}
+                </span>
+              ) : (
+                <span className="mt-1 flex size-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink">
+                  <Check className="size-3" strokeWidth={3} aria-hidden />
+                </span>
+              )}
+              <span className={emoji ? 'pt-0.5' : undefined}>{line}</span>
+            </li>
+          )
+        })}
     </ul>
   )
 }

@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Eye, EyeOff, Plus, Rocket, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Eye, EyeOff, Globe, MapPin, Plus, Rocket, Trash2 } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
-import { can, CONTRACT_TYPE_LABELS, CONTRACT_TYPES, jobInput, WORK_MODE_LABELS, WORK_MODES, type JobInput } from '@falcao-rh/contracts'
+import { Link } from '@tanstack/react-router'
+
+import { can, CONTRACT_TYPE_LABELS, CONTRACT_TYPES, jobInput, WORK_MODE_LABELS, WORK_MODES, type CareerPageContent, type JobInput } from '@falcao-rh/contracts'
 
 import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
@@ -14,7 +16,24 @@ import { orgQueries } from '../lib/queries'
 import { useMe } from '../lib/session'
 import type { JobDetail, Member } from '../lib/types'
 
-const UFS = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ')
+/** Todas as vagas da Falcão são em Camaçari/BA (decisão da Falcão, 04/11/2026). */
+export const JOB_LOCATION = { city: 'Camaçari', state: 'BA' } as const
+
+/** Nome de cada campo do contrato, para a mensagem de erro dizer onde está o problema. */
+const FIELD_LABELS: Record<string, string> = {
+  title: 'Título',
+  departmentId: 'Departamento',
+  contractType: 'Tipo de contrato',
+  workMode: 'Regime',
+  salaryMin: 'Salário mínimo',
+  salaryMax: 'Salário máximo',
+  openings: 'Posições abertas',
+  managerUserId: 'Gestor responsável',
+  description: 'Sobre a vaga',
+  requirements: 'Requisitos',
+  benefits: 'Benefícios',
+  questions: 'Perguntas',
+}
 
 type Question = { id?: string; kind: 'text' | 'yes_no' | 'choice'; label: string; options: string; required: boolean }
 type FormState = {
@@ -22,8 +41,6 @@ type FormState = {
   departmentId: string
   contractType: (typeof CONTRACT_TYPES)[number]
   workMode: (typeof WORK_MODES)[number]
-  city: string
-  state: string
   salaryMin: string
   salaryMax: string
   showSalary: boolean
@@ -32,7 +49,8 @@ type FormState = {
   visibility: 'public' | 'unlisted'
   description: string
   requirements: string
-  benefits: string
+  /** Títulos dos benefícios escolhidos (da página de vagas). */
+  benefits: string[]
   questions: Question[]
 }
 
@@ -41,8 +59,6 @@ const empty: FormState = {
   departmentId: '',
   contractType: 'clt',
   workMode: 'site',
-  city: '',
-  state: 'PE',
   salaryMin: '',
   salaryMax: '',
   showSalary: false,
@@ -51,7 +67,7 @@ const empty: FormState = {
   visibility: 'public',
   description: '',
   requirements: '',
-  benefits: '',
+  benefits: [],
   questions: [],
 }
 
@@ -60,8 +76,6 @@ const fromJob = (job: JobDetail): FormState => ({
   departmentId: job.departmentId ?? '',
   contractType: job.contractType,
   workMode: job.workMode,
-  city: job.city,
-  state: job.state ?? '',
   salaryMin: job.salaryMin === null ? '' : String(job.salaryMin),
   salaryMax: job.salaryMax === null ? '' : String(job.salaryMax),
   showSalary: job.showSalary,
@@ -70,7 +84,7 @@ const fromJob = (job: JobDetail): FormState => ({
   visibility: job.visibility,
   description: job.description,
   requirements: job.requirements,
-  benefits: job.benefits,
+  benefits: job.benefits.split('\n').map(b => b.replace(/^[-•*]\s*/, '').trim()).filter(Boolean),
   questions: job.questions.map(q => ({ id: q.id, kind: q.kind, label: q.label, options: (q.options ?? []).join('\n'), required: q.required })),
 })
 
@@ -82,8 +96,8 @@ const toInput = (form: FormState) =>
     departmentId: form.departmentId || null,
     contractType: form.contractType,
     workMode: form.workMode,
-    city: form.city,
-    state: form.state || undefined,
+    city: JOB_LOCATION.city,
+    state: JOB_LOCATION.state,
     salaryMin: money(form.salaryMin),
     salaryMax: money(form.salaryMax),
     showSalary: form.showSalary,
@@ -92,7 +106,7 @@ const toInput = (form: FormState) =>
     visibility: form.visibility,
     description: form.description,
     requirements: form.requirements,
-    benefits: form.benefits,
+    benefits: form.benefits.join('\n'),
     questions: form.questions.map(q => ({
       ...(q.id ? { id: q.id } : {}),
       kind: q.kind,
@@ -124,7 +138,21 @@ export function JobFormDrawer({ open, onOpenChange, job }: { open: boolean; onOp
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm(current => ({ ...current, [key]: value }))
   const parsed = toInput(form)
-  const issue = parsed.success ? null : parsed.error.issues[0]
+  const firstIssue = parsed.success ? null : parsed.error.issues[0]
+  const issue = firstIssue && {
+    message: `${FIELD_LABELS[String(firstIssue.path[0])] ?? 'Formulário'}: ${firstIssue.path[0] === 'departmentId' ? 'escolha um departamento da lista.' : firstIssue.message}`,
+  }
+  // Benefícios oferecidos na página de vagas (o que o candidato vê).
+  const careerPage = useQuery({
+    queryKey: ['career-page'],
+    queryFn: () => api<{ draft: CareerPageContent; published: CareerPageContent | null }>('/career-page'),
+    enabled: open,
+  })
+  const offered = (careerPage.data?.published ?? careerPage.data?.draft)?.benefits.items ?? []
+  // Benefícios já gravados na vaga que não estão mais na página continuam aparecendo.
+  const extras = form.benefits.filter(b => !offered.some(o => o.title === b))
+  const toggleBenefit = (title: string) =>
+    set('benefits', form.benefits.includes(title) ? form.benefits.filter(b => b !== title) : [...form.benefits, title])
 
   const save = useMutation({
     mutationFn: async ({ input, publish }: { input: JobInput; publish: boolean }) => {
@@ -173,7 +201,7 @@ export function JobFormDrawer({ open, onOpenChange, job }: { open: boolean; onOp
             {job ? 'Salvar' : 'Salvar rascunho'}
           </Button>
           {canPublishNow && (
-            <Button variant="primary" onClick={submit(true)} disabled={!parsed.success || !form.city || !form.state} loading={save.isPending && save.variables?.publish}>
+            <Button variant="primary" onClick={submit(true)} disabled={!parsed.success} loading={save.isPending && save.variables?.publish}>
               <Rocket className="size-4" aria-hidden /> Salvar e publicar
             </Button>
           )}
@@ -225,20 +253,16 @@ export function JobFormDrawer({ open, onOpenChange, job }: { open: boolean; onOp
           </Field>
         </div>
 
-        <div className="grid grid-cols-[1fr_110px] gap-4">
-          <Field label="Cidade" required hint="Obrigatória para publicar.">
-            {p => <Input {...p} value={form.city} onChange={e => set('city', e.target.value)} />}
-          </Field>
-          <Field label="UF" required>
-            {p => (
-              <Select {...p} value={form.state} onChange={e => set('state', e.target.value)}>
-                <option value="">—</option>
-                {UFS.map(uf => (
-                  <option key={uf}>{uf}</option>
-                ))}
-              </Select>
-            )}
-          </Field>
+        <div className="flex items-center gap-3 rounded-md border border-line bg-sunken/60 px-4 py-3">
+          <span className="flex size-9 items-center justify-center rounded-sm bg-night text-brand">
+            <MapPin className="size-4" aria-hidden />
+          </span>
+          <div className="text-[13.5px]">
+            <p className="font-medium text-ink">
+              Local da vaga: {JOB_LOCATION.city}/{JOB_LOCATION.state}
+            </p>
+            <p className="text-steel">Todas as vagas são em {JOB_LOCATION.city}.</p>
+          </div>
         </div>
 
         <div className="rounded-md border border-line bg-sunken/60 p-4">
@@ -304,9 +328,51 @@ export function JobFormDrawer({ open, onOpenChange, job }: { open: boolean; onOp
         <Field label="Requisitos" hint="Um por linha.">
           {p => <Textarea {...p} value={form.requirements} onChange={e => set('requirements', e.target.value)} placeholder={'NR-35 válida\nExperiência em obra vertical'} />}
         </Field>
-        <Field label="Benefícios" hint="Um por linha.">
-          {p => <Textarea {...p} value={form.benefits} onChange={e => set('benefits', e.target.value)} placeholder={'Plano de saúde\nVale-alimentação'} />}
-        </Field>
+        <fieldset>
+          <legend className="mb-1 text-[13.5px] font-medium text-ink-soft">Benefícios</legend>
+          <p className="mb-2.5 text-[12.5px] text-steel">Escolha entre os benefícios da página de vagas. Para criar novos, edite a página.</p>
+          {careerPage.isPending ? (
+            <p className="text-[13px] text-steel">Carregando benefícios…</p>
+          ) : offered.length === 0 && extras.length === 0 ? (
+            <p className="rounded-md border border-dashed border-line-strong px-4 py-3 text-[13px] text-steel">
+              A página de vagas ainda não tem benefícios.{' '}
+              <Link to="/recrutamento/pagina-de-vagas" className="font-medium text-ink underline underline-offset-2">
+                Cadastrar benefícios
+              </Link>
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Benefícios da vaga">
+              {[...offered.map(o => ({ title: o.title, icon: o.icon })), ...extras.map(title => ({ title, icon: '•' }))].map(benefit => {
+                const selected = form.benefits.includes(benefit.title)
+                return (
+                  <button
+                    key={benefit.title}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={selected}
+                    onClick={() => toggleBenefit(benefit.title)}
+                    className={cn(
+                      'inline-flex h-9 items-center gap-2 rounded-full border pr-3.5 pl-2.5 text-[13px] font-medium transition-all duration-200',
+                      selected ? 'border-night bg-night text-snow shadow-card' : 'border-line-strong bg-paper text-ink-soft hover:border-steel-soft',
+                    )}
+                  >
+                    <span className="text-[15px]" aria-hidden>
+                      {benefit.icon}
+                    </span>
+                    {benefit.title}
+                    {selected && <Check className="size-3.5 text-brand" aria-hidden />}
+                  </button>
+                )
+              })}
+              <Link
+                to="/recrutamento/pagina-de-vagas"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[12.5px] text-steel transition-colors hover:text-ink"
+              >
+                <Globe className="size-3.5" aria-hidden /> Editar benefícios
+              </Link>
+            </div>
+          )}
+        </fieldset>
 
         <section className="flex flex-col gap-3">
           <div>
