@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { addDaysIso } from '@falcao-rh/contracts'
 
-import { applicationAnswers, applications, auditLogs, candidates, recruitmentStages } from '../src/db/schema'
+import { applicationAnswers, applicationEvents, applications, auditLogs, candidateFiles, candidates, recruitmentStages } from '../src/db/schema'
 import { calendarDate } from '../src/lib/dates'
 import { createTestApp, type TestApp } from './harness'
 
@@ -156,5 +156,124 @@ describe('vagas internas', () => {
     expect(a!.retentionUntil).toBe(calendarDate(sixMonths))
     expect(b!.retentionUntil).toBe('2028-01-01')
     expect(addDaysIso(a!.retentionUntil!, 0)).toBe(a!.retentionUntil)
+  })
+})
+
+describe('quadro de candidaturas', () => {
+  let jobId: string
+  let otherJobId: string
+
+  beforeAll(async () => {
+    jobId = (await call('hr', 'POST', '/jobs', jobBody({ title: 'Pintor', managerUserId: org.users.manager!.id }))).json().id
+    otherJobId = (await call('hr', 'POST', '/jobs', jobBody({ title: 'Vaga sem o gestor' }))).json().id
+  })
+
+  const events = async (applicationId: string) =>
+    t.db.select().from(applicationEvents).where(eq(applicationEvents.applicationId, applicationId)).orderBy(applicationEvents.createdAt)
+
+  it('mostra as etapas e os cartões da vaga, com recusados à parte', async () => {
+    const open = await seedApplication(jobId)
+    const rejected = await seedApplication(jobId, { status: 'rejected', stageId: null, rejectionReason: 'Perfil' })
+    const board = (await call('manager', 'GET', `/jobs/${jobId}/applications`)).json()
+    expect(board.stages.map((s: { name: string }) => s.name)).toEqual(['Novo', 'Triagem', 'Entrevista', 'Proposta'])
+    expect(board.cards.map((c: { id: string }) => c.id)).toContain(open.id)
+    expect(board.rejected.map((c: { id: string }) => c.id)).toContain(rejected.id)
+    expect(board.cards[0]).toMatchObject({ stageId: stages[0]!.id, candidate: { fullName: 'Candidato Teste', city: 'Recife' }, fileStatus: null })
+  })
+
+  it('move entre etapas registrando quem moveu', async () => {
+    const application = await seedApplication(jobId)
+    expect((await call('manager', 'POST', `/applications/${application.id}/stage`, { stageId: stages[1]!.id })).statusCode).toBe(200)
+    expect((await call('hr', 'POST', `/applications/${application.id}/stage`, { stageId: stages[2]!.id })).statusCode).toBe(200)
+    const history = await events(application.id)
+    expect(history.map(e => [e.fromLabel, e.toLabel, e.actorUserId])).toEqual([
+      ['Novo', 'Triagem', org.users.manager!.id],
+      ['Triagem', 'Entrevista', org.users.hr!.id],
+    ])
+  })
+
+  it('não move para etapa de outra organização', async () => {
+    const application = await seedApplication(jobId)
+    const [foreign] = await t.db.select().from(recruitmentStages).where(eq(recruitmentStages.tenantId, other.tenant.id))
+    expect((await call('hr', 'POST', `/applications/${application.id}/stage`, { stageId: foreign!.id })).statusCode).toBe(404)
+  })
+
+  it('recusar exige motivo, avisa o candidato e pode ser desfeito', async () => {
+    const application = await seedApplication(jobId, {}, 'recusada@exemplo.com')
+    expect((await call('hr', 'POST', `/applications/${application.id}/stage`, { outcome: 'rejected' })).statusCode).toBe(400)
+    const rejected = await call('hr', 'POST', `/applications/${application.id}/stage`, { outcome: 'rejected', reason: 'Sem a NR exigida' })
+    expect(rejected.statusCode).toBe(200)
+    const [row] = await t.db.select().from(applications).where(eq(applications.id, application.id))
+    expect(row).toMatchObject({ status: 'rejected', rejectionReason: 'Sem a NR exigida' })
+    const mail = t.mailer.sent.find(m => m.to === 'recusada@exemplo.com')
+    expect(mail?.subject).toBe('Sobre sua candidatura: Pintor')
+    expect(mail?.text).toContain('Agradecemos seu interesse')
+
+    expect((await call('hr', 'POST', `/applications/${application.id}/stage`, { stageId: stages[1]!.id })).statusCode).toBe(200)
+    const [reopened] = await t.db.select().from(applications).where(eq(applications.id, application.id))
+    expect(reopened).toMatchObject({ status: 'open', stageId: stages[1]!.id, rejectionReason: null })
+    expect((await events(application.id)).map(e => e.outcome)).toEqual(['rejected', 'reopened'])
+  })
+
+  it('candidatura contratada não se move', async () => {
+    const application = await seedApplication(jobId, { status: 'hired', stageId: null })
+    expect((await call('hr', 'POST', `/applications/${application.id}/stage`, { stageId: stages[1]!.id })).statusCode).toBe(409)
+  })
+
+  it('avaliação e notas internas', async () => {
+    const application = await seedApplication(jobId)
+    expect((await call('manager', 'PATCH', `/applications/${application.id}`, { rating: 4 })).json()).toMatchObject({ rating: 4 })
+    expect((await call('hr', 'PATCH', `/applications/${application.id}`, { rating: 6 })).statusCode).toBe(400)
+    expect((await call('manager', 'POST', `/applications/${application.id}/notes`, { body: 'Boa conversa, chega cedo.' })).statusCode).toBe(201)
+    const detail = (await call('hr', 'GET', `/applications/${application.id}`)).json()
+    expect(detail.notes).toEqual([expect.objectContaining({ body: 'Boa conversa, chega cedo.', authorName: expect.any(String) })])
+  })
+
+  it('RH vê CPF e as outras candidaturas da pessoa; o gestor não', async () => {
+    const email = 'duas.vagas@exemplo.com'
+    const first = await seedApplication(jobId, {}, email)
+    await t.db.update(candidates).set({ cpf: '52998224725' }).where(eq(candidates.id, first.candidateId))
+    await t.db.insert(applications).values({
+      tenantId: org.tenant.id,
+      jobId: otherJobId,
+      candidateId: first.candidateId,
+      email,
+      status: 'open',
+      stageId: stages[0]!.id,
+      privacyToken: randomBytes(32).toString('base64url'),
+    })
+    const hr = (await call('hr', 'GET', `/applications/${first.id}`)).json()
+    expect(hr.candidate).toMatchObject({ cpf: '52998224725', email, phone: '81999998888' })
+    expect(hr.otherApplications).toEqual([expect.objectContaining({ jobTitle: 'Vaga sem o gestor', stage: 'Novo' })])
+    const manager = (await call('manager', 'GET', `/applications/${first.id}`)).json()
+    expect(manager.candidate.cpf).toBeUndefined()
+    expect(manager.candidate.email).toBe(email)
+    expect(manager.otherApplications).toBeUndefined()
+  })
+
+  it('gestor não abre candidatura de vaga que não é dele', async () => {
+    const application = await seedApplication(otherJobId)
+    expect((await call('manager', 'GET', `/applications/${application.id}`)).statusCode).toBe(404)
+    expect((await call('manager', 'POST', `/applications/${application.id}/stage`, { stageId: stages[1]!.id })).statusCode).toBe(404)
+    expect((await call('manager', 'GET', `/jobs/${otherJobId}/applications`)).statusCode).toBe(404)
+  })
+
+  it('currículo só baixa depois da verificação de segurança', async () => {
+    const application = await seedApplication(jobId)
+    const storageKey = `recruitment/${org.tenant.id}/${randomUUID()}.pdf`
+    await t.storage.put(storageKey, Buffer.from('%PDF-1.4\n%%EOF\n'))
+    const [file] = await t.db
+      .insert(candidateFiles)
+      .values({ tenantId: org.tenant.id, candidateId: application.candidateId, applicationId: application.id, storageKey, filename: 'cv.pdf', sizeBytes: 16, scanStatus: 'pending' })
+      .returning()
+    const pending = await call('hr', 'GET', `/candidate-files/${file!.id}/download`)
+    expect(pending.statusCode).toBe(409)
+    expect(pending.json().message).toBe('O currículo ainda está em verificação de segurança.')
+    await t.db.update(candidateFiles).set({ scanStatus: 'clean', scannedAt: new Date() }).where(eq(candidateFiles.id, file!.id))
+    const clean = await call('hr', 'GET', `/candidate-files/${file!.id}/download`)
+    expect(clean.statusCode).toBe(200)
+    expect(clean.json().url).toEqual(expect.any(String))
+    await t.db.update(candidateFiles).set({ scanStatus: 'infected' }).where(eq(candidateFiles.id, file!.id))
+    expect((await call('hr', 'GET', `/candidate-files/${file!.id}/download`)).statusCode).toBe(410)
   })
 })
