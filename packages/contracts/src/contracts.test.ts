@@ -172,6 +172,8 @@ describe('Recrutamento', () => {
     const parsed = jobInput.safeParse({ ...validJob, questions: [question] })
     expect(parsed.success && parsed.data.questions[0]!.id).toBe(question.id)
     expect(jobInput.safeParse({ ...validJob, questions: [{ ...question, id: 'nao-e-uuid' }] }).success).toBe(false)
+    // A API devolve options: null em perguntas que não são de escolha; reenviar como veio deve funcionar.
+    expect(jobInput.safeParse({ ...validJob, questions: [{ ...question, options: null }] }).success).toBe(true)
   })
 
   it('configurações aceitam os padrões de recrutamento', () => {

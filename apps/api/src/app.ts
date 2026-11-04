@@ -25,6 +25,7 @@ import { employeeRoutes } from './modules/employees/employees.routes'
 import { notificationRoutes } from './modules/notifications/notifications.routes'
 import { orgRoutes } from './modules/org/org.routes'
 import { publicRecruitmentRoutes } from './modules/recruitment/public.routes'
+import { jobRoutes } from './modules/recruitment/jobs.routes'
 import { recruitmentStageRoutes } from './modules/recruitment/stages.routes'
 import { requestRoutes } from './modules/requests/requests.routes'
 import { settingsRoutes } from './modules/settings/settings.routes'
@@ -128,6 +129,7 @@ export const buildApp = async (deps: AppDeps, options: FastifyServerOptions = {}
       await api.register(settingsRoutes(deps))
       await api.register(transferRoutes(deps))
       await api.register(recruitmentStageRoutes(deps))
+      await api.register(jobRoutes(deps))
     },
     { prefix: '/api/v1' },
   )

@@ -95,7 +95,12 @@ export const jobQuestionInput = z
     id: uuid.optional(),
     kind: z.enum(QUESTION_KINDS),
     label: z.string().trim().min(3).max(200),
-    options: z.array(z.string().trim().min(1).max(100)).min(2).max(10).optional(),
+    options: z
+      .array(z.string().trim().min(1).max(100))
+      .min(2)
+      .max(10)
+      .nullish()
+      .transform(v => v ?? undefined),
     required: z.boolean().default(false),
   })
   .refine(q => q.kind !== 'choice' || q.options !== undefined, {
