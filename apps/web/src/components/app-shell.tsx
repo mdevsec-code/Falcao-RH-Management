@@ -139,7 +139,7 @@ function Sidebar({ onNavigate, collapsed, onToggle }: { onNavigate?: () => void;
             </span>
             {!collapsed && (
               <div className="min-w-0 text-[12.5px] leading-[1.35]">
-                <p className="truncate font-medium text-snow/90">{me.tenant.name}</p>
+                <p className="break-words font-medium leading-snug text-snow/90">{me.tenant.name}</p>
                 <p className="text-fog/70">{ROLE_LABELS[me.role]}</p>
               </div>
             )}

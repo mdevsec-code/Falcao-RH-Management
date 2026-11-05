@@ -376,7 +376,7 @@ function ContactLink({ href, icon: Icon, children }: { href: string; icon: typeo
       className="flex min-w-0 items-center gap-2 rounded-md border border-line bg-paper px-3 py-2.5 text-[13.5px] text-ink-soft shadow-xs transition-colors hover:border-steel-soft hover:text-ink"
     >
       <Icon className="size-4 shrink-0 text-steel" aria-hidden />
-      <span className="truncate">{children}</span>
+      <span className="break-words">{children}</span>
     </a>
   )
 }

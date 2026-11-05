@@ -314,7 +314,7 @@ export const DEFAULT_CAREER_PAGE: CareerPageContent = {
       { icon: '🛒', title: 'Alimentação', text: 'Para compras/mercado.' },
       { icon: '🍽️', title: 'Refeição', text: 'Almoço e café da manhã.' },
       { icon: '🩺', title: 'Plano de Saúde', text: 'Sem descontos de mensalidades ou coparticipações, sendo custeado 100% pela empresa.' },
-      { icon: '🦷', title: 'Plano Odontológico', text: '' },
+      { icon: '🦷', title: 'Plano Odontológico', text: 'Mais cuidado com a sua saúde bucal.' },
       { icon: '📈', title: 'PPR', text: 'Programa de Participação nos resultados.' },
       { icon: '🚀', title: 'Crescimento e desenvolvimento', text: '' },
     ],

@@ -139,8 +139,8 @@ export function DashboardPage() {
                     </span>
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14.5px] text-ink">{b.name}</span>
-                    <span className="block truncate text-[12.5px] text-steel">{b.departmentName ?? 'Sem departamento'}</span>
+                    <span className="block break-words text-[14.5px] text-ink">{b.name}</span>
+                    <span className="block break-words text-[12.5px] text-steel">{b.departmentName ?? 'Sem departamento'}</span>
                   </span>
                 </li>
               ))}
@@ -485,8 +485,8 @@ function Row({ id, title, detail, aside }: { id: string; title: string; detail: 
       <Link to="/colaboradores/$id" params={{ id }} className="group flex items-center gap-3 px-5 py-3 transition-colors hover:bg-sunken">
         <Avatar name={title} size="sm" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14.5px] text-ink">{title}</span>
-          <span className="block truncate text-[12.5px] text-steel">{detail}</span>
+          <span className="block break-words text-[14.5px] text-ink">{title}</span>
+          <span className="block break-words text-[12.5px] text-steel">{detail}</span>
         </span>
         {aside && <span className="num shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[12px] text-steel ring-1 ring-line">{aside}</span>}
       </Link>

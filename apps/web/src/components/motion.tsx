@@ -2,7 +2,7 @@ import { ArrowUp } from 'lucide-react'
 import { useEffect, useRef, useState, type ElementType, type ReactNode, type RefObject } from 'react'
 
 import { cn } from '../lib/cn'
-import { Flip, gsap, MOTION, reducedMotion, ScrollTrigger, SplitText, useGSAP } from '../lib/gsap'
+import { Flip, gsap, MOTION, reducedMotion, ScrollTrigger, splitTitle, TITLE_HIDDEN_Y, useGSAP } from '../lib/gsap'
 
 /** Número que conta até o valor; anima de novo quando o valor muda. */
 export function CountUp({
@@ -64,8 +64,8 @@ export function SplitTitle({
     () => {
       const mm = gsap.matchMedia()
       mm.add(MOTION.ok, () => {
-        const split = SplitText.create(ref.current!, { type: 'lines,chars', mask: 'lines', aria: 'auto' })
-        gsap.from(split.chars, { yPercent: 115, rotate: 4, duration: 1, stagger: 0.016, delay })
+        const split = splitTitle(ref.current!)
+        gsap.from(split.chars, { yPercent: TITLE_HIDDEN_Y, rotate: 4, duration: 1, stagger: 0.016, delay })
         return () => split.revert()
       })
     },

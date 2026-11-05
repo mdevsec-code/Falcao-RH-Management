@@ -231,7 +231,7 @@ export function JobBoardPage() {
                       >
                         <Avatar name={card.candidate.fullName} size="sm" />
                         <span className="min-w-0">
-                          <span className="block truncate text-[13.5px] text-ink">{card.candidate.fullName}</span>
+                          <span className="block break-words text-[13.5px] text-ink">{card.candidate.fullName}</span>
                           <span className="block text-[11.5px] text-steel">{card.candidate.city}</span>
                         </span>
                       </button>
@@ -267,7 +267,7 @@ function Card({ card, stages, onOpen, onMove }: { card: BoardCard; stages: JobBo
       <div className="flex items-start gap-2.5">
         <Avatar name={card.candidate.fullName} size="sm" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-medium text-ink">{card.candidate.fullName}</p>
+          <p className="break-words text-[14px] font-medium text-ink">{card.candidate.fullName}</p>
           <p className="flex items-center gap-1 text-[12px] text-steel">
             <MapPin className="size-3" aria-hidden /> {card.candidate.city}/{card.candidate.state}
           </p>

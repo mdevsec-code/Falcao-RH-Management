@@ -203,7 +203,7 @@ function JobRow({ job, stages, canManage, onEdit }: { job: JobListItem; stages: 
       <span className="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-brand opacity-0 transition-opacity group-hover/row:opacity-100" aria-hidden />
       <div className="min-w-0 flex-1 basis-64">
         <div className="flex flex-wrap items-center gap-2">
-          <Link to="/recrutamento/vagas/$id" params={{ id: job.id }} className="truncate text-[15.5px] font-semibold text-ink decoration-brand decoration-2 underline-offset-4 hover:underline">
+          <Link to="/recrutamento/vagas/$id" params={{ id: job.id }} className="break-words text-[15.5px] font-semibold text-ink decoration-brand decoration-2 underline-offset-4 hover:underline">
             {job.title}
           </Link>
           <Badge tone={s.tone}>{s.label}</Badge>
@@ -316,7 +316,7 @@ function Pipeline({ job, stages, open }: { job: JobListItem; stages: Recruitment
           })}
       </div>
       {total > 0 && (
-        <p className="mt-1.5 truncate text-[11.5px] text-steel-soft">
+        <p className="mt-1.5 break-words text-[11.5px] text-steel-soft">
           {stages
             .filter(stage => job.counts.stages[stage.id])
             .map(stage => `${stage.name} ${job.counts.stages[stage.id]}`)

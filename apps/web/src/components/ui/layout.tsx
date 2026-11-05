@@ -190,7 +190,7 @@ export function Detail({ label, children }: { label: string; children: ReactNode
   return (
     <div className="min-w-0">
       <dt className="text-[12px] font-medium tracking-wide text-steel uppercase">{label}</dt>
-      <dd className="mt-1 truncate text-[14.5px] text-ink">{children ?? <span className="text-steel-soft">Não informado</span>}</dd>
+      <dd className="mt-1 break-words text-[14.5px] text-ink">{children ?? <span className="text-steel-soft">Não informado</span>}</dd>
     </div>
   )
 }

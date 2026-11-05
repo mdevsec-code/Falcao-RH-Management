@@ -11,7 +11,7 @@ import { Field, Input } from '../components/ui/field'
 import { authClient } from '../lib/auth-client'
 import { cn } from '../lib/cn'
 import { toggleTheme, useTheme } from '../lib/theme'
-import { canHover, gsap, reducedMotion, SplitText, useGSAP } from '../lib/gsap'
+import { canHover, gsap, reducedMotion, splitTitle, TITLE_HIDDEN_Y, useGSAP } from '../lib/gsap'
 
 type Step = 'password' | 'totp' | 'forgot' | 'forgot-sent'
 
@@ -33,12 +33,12 @@ function BrandPanel() {
   useGSAP(
     (_ctx, contextSafe) => {
       if (reducedMotion()) return
-      const split = SplitText.create('[data-headline]', { type: 'lines,chars', mask: 'lines', aria: 'auto' })
+      const split = splitTitle('[data-headline]')
       const tl = gsap.timeline({ defaults: { ease: 'falcon' } })
       tl.from('[data-falcon]', { clipPath: 'inset(100% 0% 0% 0%)', duration: 1.6, ease: 'expo.inOut' })
         .from('[data-falcon] img', { scale: 1.18, yPercent: 6, duration: 2.2 }, '<')
         .from('[data-brand]', { y: -16, autoAlpha: 0, duration: 0.8 }, 0.3)
-        .from(split.chars, { yPercent: 115, duration: 1, stagger: 0.016 }, 0.55)
+        .from(split.chars, { yPercent: TITLE_HIDDEN_Y, duration: 1, stagger: 0.016 }, 0.55)
         .from('[data-capability]', { y: 18, autoAlpha: 0, stagger: 0.08, duration: 0.8 }, '-=0.55')
         .from('[data-rule]', { scaleX: 0, transformOrigin: 'left', duration: 1.2, ease: 'expo.out' }, '-=0.6')
 

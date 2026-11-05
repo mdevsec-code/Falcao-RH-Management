@@ -103,11 +103,11 @@ export function AccessPage() {
                       <div className="flex items-center gap-3">
                         <Avatar name={m.name} className={m.status === 'active' ? undefined : 'opacity-50'} />
                         <div className="min-w-0">
-                          <div className="truncate font-medium text-ink">
+                          <div className="break-words font-medium text-ink">
                             {m.name}
                             {self && <span className="ml-1.5 rounded-full bg-brand-soft px-1.5 py-px text-[11px] font-medium text-brand-ink">você</span>}
                           </div>
-                          <div className="truncate text-[12.5px] text-steel">{m.email}</div>
+                          <div className="break-words text-[12.5px] text-steel">{m.email}</div>
                         </div>
                       </div>
                     </td>

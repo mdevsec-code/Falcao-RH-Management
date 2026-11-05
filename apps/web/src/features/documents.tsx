@@ -72,8 +72,8 @@ export function DocumentTable({
             <div className="flex items-center gap-3">
               <FileIcon mime={d.mimeType} />
               <div className="min-w-0">
-                <div className="truncate font-medium text-ink">{d.title}</div>
-                <div className="truncate text-[12.5px] text-steel">
+                <div className="break-words font-medium text-ink">{d.title}</div>
+                <div className="break-words text-[12.5px] text-steel">
                   {d.filename}, {formatBytes(d.sizeBytes)}
                   {d.currentVersion > 1 && `, versão ${d.currentVersion}`}
                 </div>

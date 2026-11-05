@@ -4,7 +4,7 @@ import { useRef, type ReactNode } from 'react'
 import { useTilt } from '../components/motion'
 import { Avatar, Badge, Detail, Panel } from '../components/ui/layout'
 import { contractLabel, displayCpf, EVENT_LABELS, formatDate, statusLabel, statusTone, tenure } from '../lib/format'
-import { gsap, MOTION, SplitText, useGSAP } from '../lib/gsap'
+import { gsap, MOTION, splitTitle, TITLE_HIDDEN_Y, useGSAP } from '../lib/gsap'
 import type { EmployeeDetail } from '../lib/types'
 
 /** Cabeçalho e dados da ficha: usados pelo RH (ficha) e pelo próprio colaborador (portal). */
@@ -17,11 +17,11 @@ export function ProfileHeader({ employee, actions }: { employee: EmployeeDetail;
     () => {
       const mm = gsap.matchMedia()
       mm.add(MOTION.ok, () => {
-        const split = SplitText.create('[data-profile-name]', { type: 'lines,chars', mask: 'lines', aria: 'auto' })
+        const split = splitTitle('[data-profile-name]')
         gsap
           .timeline()
           .from('[data-profile-avatar]', { scale: 0.6, rotate: -8, autoAlpha: 0, duration: 0.9, ease: 'back.out(1.6)' })
-          .from(split.chars, { yPercent: 115, duration: 0.9, stagger: 0.014 }, 0.15)
+          .from(split.chars, { yPercent: TITLE_HIDDEN_Y, duration: 0.9, stagger: 0.014 }, 0.15)
           .from('[data-profile-fade]', { y: 12, autoAlpha: 0, duration: 0.7, stagger: 0.07 }, 0.4)
           .from('[data-profile-fact]', { y: 18, autoAlpha: 0, duration: 0.7, stagger: 0.06 }, 0.5)
         return () => split.revert()
@@ -81,7 +81,7 @@ export function ProfileHeader({ employee, actions }: { employee: EmployeeDetail;
               <fact.icon className="size-4 shrink-0 text-brand" aria-hidden />
               <div className="min-w-0">
                 <dt className="text-[11px] tracking-[0.12em] text-fog/80 uppercase">{fact.label}</dt>
-                <dd className="truncate text-[14.5px] font-medium">{fact.value}</dd>
+                <dd className="break-words text-[14.5px] font-medium">{fact.value}</dd>
               </div>
             </div>
           ))}

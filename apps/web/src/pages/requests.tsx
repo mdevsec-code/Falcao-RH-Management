@@ -45,8 +45,8 @@ export function RequestsPage() {
         <div className="flex items-center gap-3">
           <Avatar name={r.employeeName} />
           <div className="min-w-0">
-            <div className="truncate font-medium text-ink">{r.employeeName}</div>
-            <div className="truncate text-[12.5px] text-steel">{r.departmentName ?? 'Sem departamento'}</div>
+            <div className="break-words font-medium text-ink">{r.employeeName}</div>
+            <div className="break-words text-[12.5px] text-steel">{r.departmentName ?? 'Sem departamento'}</div>
           </div>
         </div>
       ),

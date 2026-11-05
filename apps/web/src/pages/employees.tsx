@@ -180,7 +180,7 @@ export function EmployeesPage() {
                               to="/colaboradores/$id"
                               params={{ id: e.id }}
                               onClick={event => event.stopPropagation()}
-                              className="block truncate font-medium text-ink decoration-brand decoration-2 underline-offset-4 group-hover/row:underline"
+                              className="block break-words font-medium text-ink decoration-brand decoration-2 underline-offset-4 group-hover/row:underline"
                             >
                               {e.socialName ?? e.fullName}
                             </Link>
