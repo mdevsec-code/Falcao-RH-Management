@@ -103,6 +103,15 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     color-scheme: light;
+    background-color: var(--color-concrete);
+  }
+  /* Sem efeito elástico ao passar do fim da página (mostrava área ainda não
+     desenhada). Só com mouse: no toque ele é o "puxar para atualizar". */
+  @media (hover: hover) and (pointer: fine) {
+    html,
+    body {
+      overscroll-behavior-y: none;
+    }
   }
   body {
     @apply bg-concrete text-ink-soft font-sans text-[15px] leading-6;

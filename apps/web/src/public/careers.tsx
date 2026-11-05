@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
-import { ArrowDown, ArrowUpRight, Banknote, Briefcase, Building2, MapPin, Search, SearchX } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUpRight, Banknote, Briefcase, Building2, MapPin, Search, SearchX } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 
 import { CONTRACT_TYPE_LABELS, WORK_MODE_LABELS, type WorkMode } from '@falcao-rh/contracts'
@@ -39,10 +39,10 @@ export function CareersPage() {
         ) : (
           <>
             {data ? (
-              <Hero title={hero.title} subtitle={hero.subtitle} jobs={data.jobs.length} cities={cities} imageUrl={hero.imageId ? publicApi.assetUrl(empresa, hero.imageId) : null} />
+              <Hero title={hero.title} subtitle={hero.subtitle} jobs={data.jobs.length} cities={cities} imageUrl={hero.imageId ? publicApi.assetUrl(empresa, hero.imageId) : null} slug={empresa} openJobs={data.jobs} />
             ) : (
-              <div className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 sm:pt-10">
-                <Skeleton className="h-[420px] rounded-xl" />
+              <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:py-20">
+                <Skeleton className="h-[380px] rounded-xl" />
               </div>
             )}
             <JobList slug={empresa} jobs={data?.jobs} loading={query.isPending} />
@@ -54,48 +54,67 @@ export function CareersPage() {
   )
 }
 
-/** Capa: bloco escuro da marca, título montado por caractere e o falcão em paralaxe. */
-export function Hero({ title, subtitle, jobs, cities, imageUrl }: { title: string; subtitle: string; jobs?: number; cities: number; imageUrl: string | null }) {
+const HERO_ROWS = 4
+
+/** Faixa zebrada de obra: a assinatura visual da capa. */
+const HAZARD = 'repeating-linear-gradient(-45deg, var(--color-brand) 0 14px, var(--color-night) 14px 28px)'
+
+/**
+ * Capa como placa de obra: o convite à esquerda, solto sobre o fundo, e à
+ * direita o quadro com as vagas mais recentes, para o candidato já ver o que
+ * há de aberto. Sem `openJobs` (pré-visualização do editor) mostra exemplos.
+ */
+export function Hero({
+  title,
+  subtitle,
+  jobs,
+  cities,
+  imageUrl,
+  slug,
+  openJobs,
+}: {
+  title: string
+  subtitle: string
+  jobs?: number
+  cities: number
+  imageUrl: string | null
+  slug?: string
+  openJobs?: PublicJob[]
+}) {
   const ref = useRef<HTMLElement>(null)
   useGSAP(
     () => {
       const mm = gsap.matchMedia()
       mm.add(MOTION.ok, () => {
         gsap.from('[data-hero-fade]', { y: 18, autoAlpha: 0, duration: 0.9, stagger: 0.09, delay: 0.35 })
-        gsap.from('[data-hero-mark]', { scale: 0.8, rotate: -8, autoAlpha: 0, duration: 1.4, ease: 'expo.out' })
-        gsap.to('[data-hero-mark]', { yPercent: 18, ease: 'none', scrollTrigger: { trigger: ref.current, start: 'top top', end: 'bottom top', scrub: 0.6 } })
+        gsap
+          .timeline({ delay: 0.25 })
+          .from('[data-hero-board]', { y: 36, autoAlpha: 0, duration: 1, ease: 'expo.out' })
+          .from('[data-hero-hazard]', { scaleX: 0, transformOrigin: 'left', duration: 1.1, ease: 'expo.inOut' }, 0.1)
+          .from('[data-hero-row]', { x: 18, autoAlpha: 0, duration: 0.7, stagger: 0.07 }, 0.45)
       })
     },
     { scope: ref },
   )
   const scrollToJobs = () => document.getElementById('vagas')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const total = jobs ?? openJobs?.length ?? 0
+  const rows = openJobs?.slice(0, HERO_ROWS)
 
   return (
-    <section ref={ref} className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 sm:pt-10">
-      <div className="night-glow grain relative overflow-hidden rounded-xl border border-night-line px-6 py-14 text-snow shadow-lift sm:px-12 sm:py-20">
-        {imageUrl && <img src={imageUrl} alt="" className="absolute inset-0 size-full object-cover opacity-30" />}
-        <div className="blueprint pointer-events-none absolute inset-0 [mask-image:linear-gradient(to_right,transparent,black_55%)]" aria-hidden />
-        <img
-          data-hero-mark
-          src={falcon}
-          alt=""
-          className="pointer-events-none absolute -right-16 -bottom-24 hidden h-[130%] w-auto opacity-90 drop-shadow-[0_0_60px_rgb(254_190_2/0.25)] md:block"
-        />
-        <div className="relative max-w-2xl">
-          <p data-hero-fade className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[12px] font-medium text-fog backdrop-blur">
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-60" />
-              <span className="relative inline-flex size-2 rounded-full bg-brand" />
-            </span>
-            {jobs === undefined ? 'Carregando vagas…' : `${jobs} ${jobs === 1 ? 'vaga aberta' : 'vagas abertas'}${cities ? ` em ${cities} ${cities === 1 ? 'cidade' : 'cidades'}` : ''}`}
+    <section ref={ref} className="relative overflow-hidden border-b border-line">
+      <div className="canvas-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_right,black,transparent_70%)]" aria-hidden />
+      <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:gap-14 lg:py-20">
+        <div>
+          <p data-hero-fade className="eyebrow mb-5 flex items-center gap-2.5">
+            <span className="h-px w-8 bg-brand-strong" aria-hidden /> Carreiras
           </p>
-          <SplitTitle as="h1" className="font-display text-[clamp(44px,6.5vw,84px)] leading-[0.9] font-semibold tracking-[-0.02em]">
+          <SplitTitle as="h1" className="font-display text-[clamp(50px,7vw,92px)] leading-[0.92] font-semibold tracking-[-0.02em] text-ink">
             {title}
           </SplitTitle>
-          <p data-hero-fade className="mt-5 max-w-xl text-[17px] leading-relaxed text-fog">
+          <p data-hero-fade className="mt-6 max-w-lg text-[17px] leading-relaxed text-ink-soft">
             {subtitle}
           </p>
-          <div data-hero-fade className="mt-8 flex flex-wrap gap-3">
+          <div data-hero-fade className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
             <button
               type="button"
               onClick={scrollToJobs}
@@ -103,12 +122,70 @@ export function Hero({ title, subtitle, jobs, cities, imageUrl }: { title: strin
             >
               Ver vagas abertas <ArrowDown className="size-4" aria-hidden />
             </button>
+            {jobs !== undefined && cities > 0 && (
+              <p className="text-[14px] text-steel">
+                <span className="num font-semibold text-ink">{jobs}</span> {jobs === 1 ? 'vaga' : 'vagas'} em <span className="num font-semibold text-ink">{cities}</span> {cities === 1 ? 'cidade' : 'cidades'}
+              </p>
+            )}
           </div>
         </div>
+
+        <aside data-hero-board aria-label="Vagas mais recentes" className="overflow-hidden rounded-xl border border-night-line bg-night text-snow shadow-lift">
+          <div data-hero-hazard className="h-2.5" style={{ backgroundImage: HAZARD }} aria-hidden />
+          {imageUrl && <img src={imageUrl} alt="" className="h-40 w-full object-cover" />}
+          <div className="flex items-center gap-3 border-b border-night-line px-5 py-4">
+            <img src={falcon} alt="" className="h-7 w-auto" />
+            <p className="font-display text-[22px] leading-none font-semibold">Vagas abertas</p>
+            <span className="num ml-auto flex h-7 min-w-7 items-center justify-center rounded-full bg-brand px-2 text-[13px] font-bold text-night">{total}</span>
+          </div>
+          {rows && rows.length === 0 ? (
+            <p className="px-5 py-10 text-center text-[14px] text-fog">Nenhuma vaga aberta agora. Volte em breve: novas vagas são publicadas toda semana.</p>
+          ) : (
+            <ul className="divide-y divide-night-line">
+              {(rows ?? SAMPLE_ROWS).map(job => {
+                const body = (
+                  <>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold break-words text-snow">{job.title}</span>
+                      <span className="mt-0.5 block text-[13px] break-words text-fog">
+                        {[job.departmentName, job.state ? `${job.city}/${job.state}` : job.city].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    <ArrowRight className="size-4 shrink-0 text-brand transition-transform duration-300 group-hover:translate-x-1" aria-hidden />
+                  </>
+                )
+                const row = 'group flex items-center gap-4 px-5 py-3.5'
+                return (
+                  <li key={job.token} data-hero-row>
+                    {rows && slug ? (
+                      <Link to="/vagas/$empresa/$token" params={{ empresa: slug, token: job.token }} className={cn(row, 'transition-colors hover:bg-white/5')}>
+                        {body}
+                      </Link>
+                    ) : (
+                      <div className={row}>{body}</div>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          {total > HERO_ROWS && (
+            <button type="button" onClick={scrollToJobs} className="flex w-full items-center justify-center gap-1.5 border-t border-night-line px-5 py-3.5 text-[13.5px] font-medium text-brand transition-colors hover:bg-white/5">
+              Ver todas as {total} vagas <ArrowDown className="size-3.5" aria-hidden />
+            </button>
+          )}
+        </aside>
       </div>
     </section>
   )
 }
+
+/** Linhas de exemplo da pré-visualização do editor. */
+const SAMPLE_ROWS = [
+  { token: 'a', title: 'Mestre de obras', departmentName: 'Obras', city: 'Camaçari', state: 'BA' },
+  { token: 'b', title: 'Eletricista predial', departmentName: 'Obras', city: 'Camaçari', state: 'BA' },
+  { token: 'c', title: 'Técnico(a) de segurança do trabalho', departmentName: 'Segurança do Trabalho', city: 'Camaçari', state: 'BA' },
+]
 
 const MODE_FILTERS: { value: '' | WorkMode; label: string }[] = [
   { value: '', label: 'Todas' },
