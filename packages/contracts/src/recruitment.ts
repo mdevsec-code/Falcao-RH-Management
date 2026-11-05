@@ -94,7 +94,7 @@ export const jobQuestionInput = z
     /** Pergunta existente (editar sem perder respostas); ausente = nova. */
     id: uuid.optional(),
     kind: z.enum(QUESTION_KINDS),
-    label: z.string().trim().min(3).max(200),
+    label: z.string().trim().min(3, 'Escreva a pergunta com ao menos 3 caracteres.').max(200, 'Use até 200 caracteres na pergunta.'),
     options: z
       .array(z.string().trim().min(1).max(100))
       .min(2)
@@ -115,7 +115,7 @@ export type JobQuestionInput = z.infer<typeof jobQuestionInput>
 
 export const jobInput = z
   .object({
-    title: z.string().trim().min(3).max(120),
+    title: z.string().trim().min(3, 'Escreva ao menos 3 caracteres.').max(120, 'Use até 120 caracteres.'),
     departmentId: uuid.nullable().default(null),
     unitId: uuid.nullable().default(null),
     positionId: uuid.nullable().default(null),
@@ -129,7 +129,7 @@ export const jobInput = z
     description: z.string().trim().min(20, 'Descreva a vaga com ao menos 20 caracteres.').max(10_000),
     requirements: text(10_000).default(''),
     benefits: text(10_000).default(''),
-    openings: z.number().int().min(1).max(99).default(1),
+    openings: z.number('Informe um número.').int('Use um número inteiro.').min(1, 'Informe ao menos 1 posição.').max(99, 'Use até 99 posições.').default(1),
     managerUserId: z.string().nullable().default(null),
     visibility: z.enum(JOB_VISIBILITIES).default('public'),
     questions: z.array(jobQuestionInput).max(10).default([]),
@@ -305,7 +305,20 @@ export const DEFAULT_CAREER_PAGE: CareerPageContent = {
     imageId: null,
   },
   about: { enabled: true, title: 'Sobre a Falcão', body: '', imageIds: [] },
-  benefits: { enabled: false, title: 'Por que trabalhar aqui', items: [] },
+  benefits: {
+    enabled: true,
+    title: 'Por que trabalhar aqui',
+    items: [
+      { icon: '💰', title: 'Salário', text: 'Compatível com o mercado.' },
+      { icon: '🚌', title: 'Transporte', text: 'Fretado ou auxílio mobilidade.' },
+      { icon: '🛒', title: 'Alimentação', text: 'Para compras/mercado.' },
+      { icon: '🍽️', title: 'Refeição', text: 'Almoço e café da manhã.' },
+      { icon: '🩺', title: 'Plano de Saúde', text: 'Sem descontos de mensalidades ou coparticipações, sendo custeado 100% pela empresa.' },
+      { icon: '🦷', title: 'Plano Odontológico', text: '' },
+      { icon: '📈', title: 'PPR', text: 'Programa de Participação nos resultados.' },
+      { icon: '🚀', title: 'Crescimento e desenvolvimento', text: '' },
+    ],
+  },
   faq: { enabled: true, items: [] },
   links: {},
 }

@@ -194,6 +194,17 @@ describe('Recrutamento', () => {
 describe('Página de vagas editável', () => {
   it('o conteúdo padrão é válido', () => {
     expect(careerPageContent.safeParse(DEFAULT_CAREER_PAGE).success).toBe(true)
+    expect(DEFAULT_CAREER_PAGE.benefits.items.map(b => b.title)).toEqual([
+      'Salário',
+      'Transporte',
+      'Alimentação',
+      'Refeição',
+      'Plano de Saúde',
+      'Plano Odontológico',
+      'PPR',
+      'Crescimento e desenvolvimento',
+    ])
+    for (const item of DEFAULT_CAREER_PAGE.benefits.items) expect(item.icon).toBe(suggestBenefitEmoji(item.title))
   })
 
   it('recusa HTML em qualquer texto, para não abrir brecha de script na página pública', () => {
@@ -233,5 +244,20 @@ describe('Página de vagas editável', () => {
     expect(links({ instagram: 'javascript:alert(1)' })).toBe(false)
     expect(links({ site: 'https://falcao.com.br', whatsapp: '(81) 99999-0000', email: 'rh@falcao.com.br' })).toBe(true)
     expect(links({ email: 'nao-e-email' })).toBe(false)
+  })
+})
+
+describe('mensagens de erro em português', () => {
+  const base = { contractType: 'clt', workMode: 'site', description: 'Descrição com tamanho suficiente.' }
+  const messageOf = (value: object) => jobInput.safeParse(value).error?.issues[0]?.message
+
+  it('título curto explica o que falta', () => {
+    expect(messageOf({ ...base, title: 'a' })).toBe('Escreva ao menos 3 caracteres.')
+  })
+
+  it('nenhum campo sem mensagem própria sai em inglês', () => {
+    const message = messageOf({ ...base, title: 'Pedreiro', contractType: 'x' })
+    expect(message).toBeDefined()
+    expect(message).not.toMatch(/invalid|expected|too small/i)
   })
 })
