@@ -196,6 +196,12 @@ export const candidateFilters = z.object({
 })
 export type CandidateFilters = z.infer<typeof candidateFilters>
 
+export const candidateUpdate = z.object({
+  tags: z.array(z.string().trim().min(1, 'Escreva a etiqueta.').max(40, 'Use até 40 caracteres na etiqueta.')).max(20, 'Use até 20 etiquetas.'),
+})
+export const candidateMerge = z.object({ sourceId: uuid })
+export const candidateInvite = z.object({ jobId: uuid })
+
 // ---------- configurações ----------
 
 export const RECRUITMENT_DEFAULTS = {

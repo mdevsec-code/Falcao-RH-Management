@@ -128,6 +128,13 @@ const careersEditorRoute = createRoute({
   component: lazyRouteComponent(() => import('./pages/careers-editor'), 'CareersEditorPage'),
 })
 
+const talentPoolRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/talentos',
+  beforeLoad: guard('talent_pool.read'),
+  component: lazyRouteComponent(() => import('./pages/talent-pool'), 'TalentPoolPage'),
+})
+
 const structureRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/estrutura',
@@ -199,6 +206,7 @@ const routeTree = rootRoute.addChildren([
     structureRoute,
     recruitmentRoute,
     careersEditorRoute,
+    talentPoolRoute,
     jobBoardRoute,
     portalRoute,
     accessRoute,

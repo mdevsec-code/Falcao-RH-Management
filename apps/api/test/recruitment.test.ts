@@ -378,3 +378,138 @@ describe('contratação', () => {
     expect((await call('hr', 'GET', `/jobs/${jobId}`)).json().hiredCount).toBe(before)
   })
 })
+
+describe('banco de talentos', () => {
+  let jobId: string
+  let draftId: string
+  const inOneYear = addDaysIso(calendarDate(), 365)
+
+  /** Candidato com uma candidatura; `consent` grava consentimento vigente. */
+  const seedPerson = async (person: Partial<typeof candidates.$inferInsert> = {}, consent = true, email = `${randomUUID()}@exemplo.com`) => {
+    const application = await seedApplication(jobId, consent ? { talentPoolConsent: true, consentAt: new Date(), retentionUntil: inOneYear } : {}, email)
+    if (Object.keys(person).length) await t.db.update(candidates).set(person).where(eq(candidates.id, application.candidateId))
+    return application
+  }
+
+  const search = async (query: string) => {
+    const response = await call('hr', 'GET', `/candidates?${query}`)
+    expect(response.statusCode).toBe(200)
+    return response.json() as { items: { id: string; fullName: string; duplicateOf: string[]; consentUntil: string | null; applications: number }[]; total: number }
+  }
+
+  beforeAll(async () => {
+    jobId = (await call('hr', 'POST', '/jobs', jobBody({ title: 'Vaga do banco', openings: 5, questions: [] }))).json().id
+    await call('hr', 'POST', `/jobs/${jobId}/status`, { status: 'published' })
+    draftId = (await call('hr', 'POST', '/jobs', jobBody({ title: 'Rascunho do banco', questions: [] }))).json().id
+  })
+
+  it('busca por nome, cidade e etiqueta', async () => {
+    const person = await seedPerson({ fullName: 'Zuleica Andrade', city: 'Petrolina', state: 'PE', tags: ['nr-35', 'pedreiro'] })
+    expect((await search('q=zuleica')).items.map(c => c.id)).toEqual([person.candidateId])
+    expect((await search('city=petrolina')).items.map(c => c.id)).toEqual([person.candidateId])
+    expect((await search('tag=nr-35')).items.map(c => c.id)).toEqual([person.candidateId])
+    expect((await search('tag=eletricista&city=Petrolina')).items).toHaveLength(0)
+  })
+
+  it('busca também nas respostas às perguntas', async () => {
+    const job = (await call('hr', 'POST', '/jobs', jobBody({ title: 'Vaga com pergunta', questions: [{ kind: 'text', label: 'Conte sua experiência', required: false }] }))).json()
+    const application = await seedApplication(job.id, { talentPoolConsent: true, consentAt: new Date(), retentionUntil: inOneYear })
+    await t.db.insert(applicationAnswers).values({ tenantId: org.tenant.id, applicationId: application.id, questionId: job.questions[0].id, value: 'Trabalhei com andaimes suspensos' })
+    expect((await search('q=andaimes')).items.map(c => c.id)).toEqual([application.candidateId])
+  })
+
+  it('por padrão só lista quem tem consentimento vigente', async () => {
+    const without = await seedPerson({ city: 'Garanhuns' }, false)
+    const expired = await seedApplication(jobId, { talentPoolConsent: true, consentAt: new Date(), retentionUntil: addDaysIso(calendarDate(), -1) })
+    await t.db.update(candidates).set({ city: 'Garanhuns' }).where(eq(candidates.id, expired.candidateId))
+    const valid = await seedPerson({ city: 'Garanhuns' })
+    const onlyConsent = await search('city=Garanhuns')
+    expect(onlyConsent.items.map(c => c.id)).toEqual([valid.candidateId])
+    expect(onlyConsent.items[0]!.consentUntil).toBe(inOneYear)
+    expect((await search('city=Garanhuns&consent=all')).items.map(c => c.id).sort()).toEqual([without.candidateId, expired.candidateId, valid.candidateId].sort())
+  })
+
+  it('ficha traz candidaturas, notas e arquivos', async () => {
+    const application = await seedPerson({ fullName: 'Ficha Completa' })
+    await call('hr', 'POST', `/applications/${application.id}/notes`, { body: 'Boa conversa' })
+    const response = await call('hr', 'GET', `/candidates/${application.candidateId}`)
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({
+      fullName: 'Ficha Completa',
+      applications: [expect.objectContaining({ id: application.id, jobTitle: 'Vaga do banco', stage: 'Novo', notes: [expect.objectContaining({ body: 'Boa conversa' })] })],
+      files: [],
+    })
+  })
+
+  it('edita etiquetas sem repetir', async () => {
+    const application = await seedPerson()
+    const response = await call('hr', 'PATCH', `/candidates/${application.candidateId}`, { tags: ['nr-10', 'nr-10', 'solda'] })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().tags).toEqual(['nr-10', 'solda'])
+    expect((await call('hr', 'PATCH', `/candidates/${application.candidateId}`, { tags: ['x'.repeat(41)] })).statusCode).toBe(400)
+  })
+
+  it('aponta duplicatas pelo e-mail e pelo CPF', async () => {
+    const email = `${randomUUID()}@exemplo.com`
+    const first = await seedPerson({ cpf: '11144477735' }, true, email)
+    const sameEmail = await seedApplication(draftId, {}, email)
+    const sameCpf = await seedPerson({ cpf: '11144477735' })
+    const duplicates = (await call('hr', 'GET', `/candidates/${first.candidateId}/duplicates`)).json() as { id: string }[]
+    expect(duplicates.map(d => d.id).sort()).toEqual([sameEmail.candidateId, sameCpf.candidateId].sort())
+    const listed = (await search(`q=${email}`)).items.find(c => c.id === first.candidateId)
+    expect(listed!.duplicateOf).toContain(sameEmail.candidateId)
+  })
+
+  it('junta fichas: candidaturas e arquivos vão para a ficha, etiquetas se somam e vale o contato mais recente', async () => {
+    const email = `${randomUUID()}@exemplo.com`
+    const older = await seedPerson({ fullName: 'Nome Antigo', tags: ['nr-35'] }, true, email)
+    await t.db.update(applications).set({ createdAt: new Date('2024-01-01T12:00:00Z') }).where(eq(applications.id, older.id))
+    const newer = await seedApplication(draftId, {}, email)
+    await t.db.update(candidates).set({ fullName: 'Nome Novo', phone: '81911112222', tags: ['pedreiro'] }).where(eq(candidates.id, newer.candidateId))
+    await t.db.insert(candidateFiles).values({ tenantId: org.tenant.id, candidateId: newer.candidateId, applicationId: newer.id, storageKey: `recruitment/${randomUUID()}.pdf`, filename: 'cv.pdf', sizeBytes: 16, scanStatus: 'clean' })
+
+    const response = await call('hr', 'POST', `/candidates/${older.candidateId}/merge`, { sourceId: newer.candidateId })
+    expect(response.statusCode).toBe(200)
+    const merged = (await call('hr', 'GET', `/candidates/${older.candidateId}`)).json()
+    expect(merged.applications).toHaveLength(2)
+    expect(merged.files).toHaveLength(1)
+    expect(merged).toMatchObject({ fullName: 'Nome Novo', phone: '81911112222', tags: ['nr-35', 'pedreiro'] })
+    expect(await t.db.select().from(candidates).where(eq(candidates.id, newer.candidateId))).toHaveLength(0)
+    const [log] = await t.db.select().from(auditLogs).where(and(eq(auditLogs.action, 'candidate.merged'), eq(auditLogs.entityId, older.candidateId)))
+    expect(log!.metadata).toEqual({ sourceId: newer.candidateId })
+  })
+
+  it('não junta pessoas sem e-mail ou CPF em comum, nem a ficha com ela mesma', async () => {
+    const one = await seedPerson()
+    const two = await seedPerson()
+    expect((await call('hr', 'POST', `/candidates/${one.candidateId}/merge`, { sourceId: two.candidateId })).statusCode).toBe(400)
+    expect((await call('hr', 'POST', `/candidates/${one.candidateId}/merge`, { sourceId: one.candidateId })).statusCode).toBe(400)
+  })
+
+  it('convida para vaga publicada; rascunho é recusado', async () => {
+    const application = await seedPerson()
+    expect((await call('hr', 'POST', `/candidates/${application.candidateId}/invite`, { jobId: draftId })).statusCode).toBe(400)
+    t.mailer.sent.length = 0
+    const response = await call('hr', 'POST', `/candidates/${application.candidateId}/invite`, { jobId })
+    expect(response.statusCode).toBe(200)
+    expect(t.mailer.sent).toEqual([expect.objectContaining({ to: application.email, subject: 'A Falcão tem uma vaga para você: Vaga do banco' })])
+    expect(t.mailer.sent[0]!.text).toContain(`${t.env.WEB_ORIGIN}/vagas/recrut/`)
+    const [row] = await t.db.select({ invitedAt: candidates.invitedAt }).from(candidates).where(eq(candidates.id, application.candidateId))
+    expect(row!.invitedAt).not.toBeNull()
+  })
+
+  it('não convida quem não autorizou o banco de talentos', async () => {
+    const application = await seedPerson({}, false)
+    t.mailer.sent.length = 0
+    const response = await call('hr', 'POST', `/candidates/${application.candidateId}/invite`, { jobId })
+    expect(response.statusCode).toBe(409)
+    expect(t.mailer.sent).toHaveLength(0)
+  })
+
+  it('gestor e colaborador não acessam; outra organização não enxerga a ficha', async () => {
+    const application = await seedPerson()
+    expect((await call('manager', 'GET', '/candidates')).statusCode).toBe(403)
+    expect((await call('employee', 'GET', '/candidates')).statusCode).toBe(403)
+    expect((await call('hr', 'GET', `/candidates/${application.candidateId}`, undefined, other)).statusCode).toBe(404)
+  })
+})

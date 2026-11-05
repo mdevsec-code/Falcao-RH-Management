@@ -15,7 +15,7 @@ const scope = (ctx: Ctx) => (ctx.role === 'manager' ? eq(jobOpenings.managerUser
 
 const shareUrl = (webOrigin: string, slug: string, token: string) => `${webOrigin}/vagas/${slug}/${token}`
 
-const tenantSlug = async (tx: Tx, tenantId: string) => {
+export const tenantSlug = async (tx: Tx, tenantId: string) => {
   const [tenant] = await tx.select({ slug: tenants.slug, settings: tenants.settings }).from(tenants).where(eq(tenants.id, tenantId))
   if (!tenant) throw notFound('Organização')
   return tenant

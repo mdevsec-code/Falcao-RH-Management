@@ -1,5 +1,6 @@
 import {
   BriefcaseBusiness,
+  Contact,
   Building2,
   CalendarCheck,
   FileText,
@@ -33,6 +34,7 @@ export const NAV: NavItem[] = [
   { to: '/solicitacoes', label: 'Solicitações', description: 'Aprovações, férias e calendário', icon: CalendarCheck, permission: 'requests.read', section: 'Gestão' },
   { to: '/documentos', label: 'Documentos', description: 'Arquivos, validade e versões', icon: FileText, permission: 'documents.read', section: 'Gestão' },
   { to: '/recrutamento', label: 'Recrutamento', description: 'Vagas, candidatos e publicação', icon: BriefcaseBusiness, permission: 'recruitment.read', section: 'Gestão' },
+  { to: '/talentos', label: 'Banco de talentos', description: 'Fichas, etiquetas e convites', icon: Contact, permission: 'talent_pool.read', section: 'Gestão' },
   { to: '/recrutamento/pagina-de-vagas', label: 'Página de vagas', description: 'Editar a página pública de recrutamento', icon: Globe, permission: 'recruitment.manage', section: 'Gestão' },
   { to: '/estrutura', label: 'Estrutura', description: 'Organograma, departamentos e cargos', icon: Building2, permission: 'org.read', section: 'Gestão' },
   { to: '/meu-cadastro', label: 'Meu cadastro', description: 'Seus dados e documentos', icon: IdCard, permission: 'self.read', section: 'Pessoal', needsEmployee: true },

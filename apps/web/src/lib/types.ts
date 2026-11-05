@@ -316,6 +316,49 @@ export type BoardCard = {
 
 export type JobBoard = { stages: { id: string; name: string; position: number }[]; cards: BoardCard[]; rejected: BoardCard[] }
 
+export type CandidateListItem = {
+  id: string
+  fullName: string
+  city: string
+  state: string
+  tags: string[]
+  invitedAt: string | null
+  lastApplicationAt: string | null
+  applications: number
+  consentUntil: string | null
+  duplicateOf: string[]
+}
+
+export type CandidateDetail = {
+  id: string
+  fullName: string
+  email: string
+  phone: string
+  city: string
+  state: string
+  cpf: string | null
+  linkedin: string | null
+  tags: string[]
+  invitedAt: string | null
+  canInvite: boolean
+  applications: {
+    id: string
+    jobId: string
+    jobTitle: string
+    status: 'open' | 'hired' | 'rejected'
+    stage: string | null
+    rating: number | null
+    rejectionReason: string | null
+    talentPoolConsent: boolean
+    retentionUntil: string | null
+    createdAt: string
+    notes: { id: string; body: string; authorName: string | null; createdAt: string }[]
+  }[]
+  files: { id: string; filename: string; sizeBytes: number; scanStatus: FileScanStatus; createdAt: string }[]
+}
+
+export type CandidateDuplicate = { id: string; fullName: string; email: string; city: string; state: string; createdAt: string }
+
 export type ApplicationDetail = {
   id: string
   jobId: string
