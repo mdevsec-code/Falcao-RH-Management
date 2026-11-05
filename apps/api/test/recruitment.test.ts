@@ -4,9 +4,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { addDaysIso } from '@falcao-rh/contracts'
 
-import { applicationAnswers, applicationEvents, applications, auditLogs, candidateFiles, candidates, recruitmentStages } from '../src/db/schema'
+import { applicationAnswers, applicationEvents, applications, auditLogs, candidateFiles, candidates, documentCategories, documents, employeeEvents, recruitmentStages } from '../src/db/schema'
 import { calendarDate } from '../src/lib/dates'
-import { createTestApp, type TestApp } from './harness'
+import { createTestApp, nextCpf, type TestApp } from './harness'
 
 type Role = 'admin' | 'hr' | 'manager' | 'employee'
 
@@ -275,5 +275,106 @@ describe('quadro de candidaturas', () => {
     expect(clean.json().url).toEqual(expect.any(String))
     await t.db.update(candidateFiles).set({ scanStatus: 'infected' }).where(eq(candidateFiles.id, file!.id))
     expect((await call('hr', 'GET', `/candidate-files/${file!.id}/download`)).statusCode).toBe(410)
+  })
+})
+
+describe('contratação', () => {
+  let jobId: string
+
+  const employeeBody = (extra: object = {}) => ({
+    registration: `C-${randomUUID().slice(0, 8)}`,
+    fullName: 'Candidato Teste',
+    cpf: nextCpf(),
+    hireDate: calendarDate(),
+    contractType: 'clt',
+    ...extra,
+  })
+
+  const seedFile = async (application: { id: string; candidateId: string }, scanStatus: 'clean' | 'pending' = 'clean') => {
+    const storageKey = `recruitment/${org.tenant.id}/${randomUUID()}.pdf`
+    await t.storage.put(storageKey, Buffer.from('%PDF-1.4\n%%EOF\n'))
+    await t.db.insert(candidateFiles).values({ tenantId: org.tenant.id, candidateId: application.candidateId, applicationId: application.id, storageKey, filename: 'cv.pdf', sizeBytes: 16, scanStatus })
+    return storageKey
+  }
+
+  beforeAll(async () => {
+    jobId = (await call('hr', 'POST', '/jobs', jobBody({ title: 'Vaga da contratação', openings: 2, questions: [] }))).json().id
+    await call('hr', 'POST', `/jobs/${jobId}/status`, { status: 'published' })
+  })
+
+  it('não contrata quem ainda está em Novo nem candidatura recusada', async () => {
+    const fresh = await seedApplication(jobId)
+    const response = await call('hr', 'POST', `/applications/${fresh.id}/hire`, employeeBody())
+    expect(response.statusCode).toBe(409)
+    expect(response.json().message).toBe('Mova o candidato para além de Novo antes de contratar.')
+    const rejected = await seedApplication(jobId, { status: 'rejected', stageId: null })
+    expect((await call('hr', 'POST', `/applications/${rejected.id}/hire`, employeeBody())).statusCode).toBe(409)
+  })
+
+  it('gestor não contrata, mesmo na própria vaga', async () => {
+    const application = await seedApplication(jobId, { stageId: stages[3]!.id })
+    expect((await call('manager', 'POST', `/applications/${application.id}/hire`, employeeBody())).statusCode).toBe(403)
+  })
+
+  it('cria o colaborador, leva o currículo e encerra a ficha do candidato', async () => {
+    const application = await seedApplication(jobId, { stageId: stages[3]!.id })
+    const storageKey = await seedFile(application)
+    t.mailer.sent.length = 0
+
+    const response = await call('hr', 'POST', `/applications/${application.id}/hire`, employeeBody())
+    expect(response.statusCode).toBe(201)
+    const { employeeId, suggestCloseJob } = response.json()
+    expect(suggestCloseJob).toBe(false)
+
+    const [hired] = await t.db.select().from(employeeEvents).where(and(eq(employeeEvents.employeeId, employeeId), eq(employeeEvents.type, 'hired')))
+    expect(hired!.reason).toBe('Admissão via vaga Vaga da contratação')
+
+    const [document] = await t.db
+      .select({ id: documents.id, category: documentCategories.name, sensitive: documentCategories.sensitive, employeeVisible: documentCategories.employeeVisible })
+      .from(documents)
+      .innerJoin(documentCategories, eq(documentCategories.id, documents.categoryId))
+      .where(eq(documents.employeeId, employeeId))
+    expect(document).toMatchObject({ category: 'Currículo', sensitive: false, employeeVisible: true })
+    expect((await call('hr', 'GET', `/documents/${document!.id}/download`)).statusCode).toBe(200)
+    // O arquivo continua no armazenamento: agora ele é do colaborador.
+    expect((await t.storage.read(storageKey)).length).toBeGreaterThan(0)
+
+    expect(await t.db.select().from(candidates).where(eq(candidates.id, application.candidateId))).toHaveLength(0)
+    expect(await t.db.select().from(applications).where(eq(applications.id, application.id))).toHaveLength(0)
+    expect((await call('hr', 'GET', `/jobs/${jobId}`)).json().hiredCount).toBe(1)
+
+    expect(t.mailer.sent).toEqual([expect.objectContaining({ to: application.email, subject: 'Boas notícias sobre a vaga Vaga da contratação' })])
+    const [log] = await t.db.select().from(auditLogs).where(and(eq(auditLogs.action, 'application.hired'), eq(auditLogs.entityId, application.id)))
+    expect(log!.metadata).toEqual({ employeeId, jobId })
+  })
+
+  it('sugere encerrar a vaga quando as posições acabam', async () => {
+    const application = await seedApplication(jobId, { stageId: stages[2]!.id })
+    const response = await call('hr', 'POST', `/applications/${application.id}/hire`, employeeBody())
+    expect(response.statusCode).toBe(201)
+    expect(response.json().suggestCloseJob).toBe(true)
+    expect((await call('hr', 'GET', `/jobs/${jobId}`)).json().status).toBe('published')
+  })
+
+  it('currículo ainda em verificação não vira documento e é removido com a ficha', async () => {
+    const application = await seedApplication(jobId, { stageId: stages[3]!.id })
+    const storageKey = await seedFile(application, 'pending')
+    const response = await call('hr', 'POST', `/applications/${application.id}/hire`, employeeBody())
+    expect(response.statusCode).toBe(201)
+    expect(await t.db.select().from(documents).where(eq(documents.employeeId, response.json().employeeId))).toHaveLength(0)
+    await expect(t.storage.read(storageKey)).rejects.toThrow()
+  })
+
+  it('CPF já cadastrado: 409 do cadastro e nada muda na candidatura', async () => {
+    const cpf = nextCpf()
+    expect((await call('hr', 'POST', '/employees', employeeBody({ cpf }))).statusCode).toBe(201)
+    const application = await seedApplication(jobId, { stageId: stages[3]!.id })
+    const before = (await call('hr', 'GET', `/jobs/${jobId}`)).json().hiredCount
+    const response = await call('hr', 'POST', `/applications/${application.id}/hire`, employeeBody({ cpf }))
+    expect(response.statusCode).toBe(409)
+    expect(response.json().message).toBe('Já existe um colaborador com este CPF com este valor.')
+    const [row] = await t.db.select().from(applications).where(eq(applications.id, application.id))
+    expect(row).toMatchObject({ status: 'open', stageId: stages[3]!.id })
+    expect((await call('hr', 'GET', `/jobs/${jobId}`)).json().hiredCount).toBe(before)
   })
 })

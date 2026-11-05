@@ -1,6 +1,8 @@
-import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
 
-import { APPLICATION_STATUS_LABELS, RECRUITMENT_DEFAULTS, type StageMove, type TenantSettings } from '@falcao-rh/contracts'
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm'
+
+import { APPLICATION_STATUS_LABELS, RECRUITMENT_DEFAULTS, type EmployeeInput, type StageMove, type TenantSettings } from '@falcao-rh/contracts'
 
 import type { Tx } from '../../db/client'
 import {
@@ -10,6 +12,9 @@ import {
   applications,
   candidateFiles,
   candidates,
+  documentCategories,
+  documents,
+  documentVersions,
   jobOpenings,
   jobQuestions,
   recruitmentStages,
@@ -17,9 +22,11 @@ import {
   user,
 } from '../../db/schema'
 import type { Ctx } from '../../http/context'
+import { audit } from '../../lib/audit'
 import { AppError, notFound } from '../../lib/errors'
 import type { Mail } from '../../lib/mailer'
 import type { Storage } from '../../lib/storage'
+import { createEmployee } from '../employees/employees.service'
 
 /** Gestor só enxerga candidaturas das vagas em que é o responsável. */
 const jobScope = (ctx: Ctx) => (ctx.role === 'manager' ? eq(jobOpenings.managerUserId, ctx.userId) : undefined)
@@ -246,6 +253,79 @@ export const moveApplication = async (tx: Tx, ctx: Ctx, id: string, input: Stage
   const [tenant] = await tx.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, ctx.tenantId))
   const message = (tenant?.settings as TenantSettings | undefined)?.recruitment?.rejectionMessage ?? RECRUITMENT_DEFAULTS.rejectionMessage
   return { to: current.email, subject: `Sobre sua candidatura: ${current.jobTitle}`, text: message }
+}
+
+const RESUME_CATEGORY = 'Currículo'
+
+const resumeCategoryId = async (tx: Tx, ctx: Ctx) => {
+  const [existing] = await tx.select({ id: documentCategories.id }).from(documentCategories).where(eq(documentCategories.name, RESUME_CATEGORY))
+  if (existing) return existing.id
+  const [created] = await tx
+    .insert(documentCategories)
+    .values({ tenantId: ctx.tenantId, name: RESUME_CATEGORY, employeeVisible: true, employeeUpload: false, sensitive: false, requiresExpiry: false })
+    .returning({ id: documentCategories.id })
+  return created!.id
+}
+
+/**
+ * Contratar: em uma transação cria o colaborador, leva o currículo verificado
+ * como documento e apaga a ficha do candidato (spec: os dados passam a viver
+ * no cadastro). E-mail e remoção de arquivos ficam para depois do commit.
+ */
+export const hireApplication = async (tx: Tx, ctx: Ctx, storage: Storage, id: string, input: EmployeeInput) => {
+  const current = await applicationInScope(tx, ctx, id)
+  if (current.status !== 'open') throw new AppError(409, 'not_open', 'Só candidaturas em andamento podem ser contratadas.')
+  const [stage] = await tx.select({ isInitial: recruitmentStages.isInitial }).from(recruitmentStages).where(eq(recruitmentStages.id, current.stageId!))
+  if (stage?.isInitial) throw new AppError(409, 'initial_stage', 'Mova o candidato para além de Novo antes de contratar.')
+
+  const employee = await createEmployee(tx, ctx, input, { hiredReason: `Admissão via vaga ${current.jobTitle}` })
+
+  const [resume] = await tx
+    .select()
+    .from(candidateFiles)
+    .where(eq(candidateFiles.applicationId, id))
+    .orderBy(desc(candidateFiles.createdAt))
+    .limit(1)
+  const keptKey = resume?.scanStatus === 'clean' ? resume.storageKey : null
+  if (resume && keptKey) {
+    const [document] = await tx
+      .insert(documents)
+      .values({ tenantId: ctx.tenantId, employeeId: employee.id, categoryId: await resumeCategoryId(tx, ctx), title: RESUME_CATEGORY, createdBy: ctx.userId })
+      .returning({ id: documents.id })
+    await tx.insert(documentVersions).values({
+      tenantId: ctx.tenantId,
+      documentId: document!.id,
+      version: 1,
+      storageKey: keptKey,
+      filename: resume.filename,
+      mimeType: 'application/pdf',
+      sizeBytes: resume.sizeBytes,
+      sha256: createHash('sha256').update(await storage.read(keptKey)).digest('hex'),
+      uploadedBy: ctx.userId,
+    })
+  }
+
+  const [job] = await tx
+    .update(jobOpenings)
+    .set({ hiredCount: sql`${jobOpenings.hiredCount} + 1` })
+    .where(eq(jobOpenings.id, current.jobId))
+    .returning({ hiredCount: jobOpenings.hiredCount, openings: jobOpenings.openings })
+
+  // Todos os arquivos da ficha saem do armazenamento, menos o que virou documento.
+  const files = await tx.select({ storageKey: candidateFiles.storageKey }).from(candidateFiles).where(eq(candidateFiles.candidateId, current.candidateId))
+  // Apagar a ficha leva junto as candidaturas (cascata), inclusive esta.
+  await tx.delete(candidates).where(eq(candidates.id, current.candidateId))
+  await audit(tx, ctx, { action: 'application.hired', entity: 'application', entityId: id, metadata: { employeeId: employee.id, jobId: current.jobId } })
+
+  const [tenant] = await tx.select({ settings: tenants.settings }).from(tenants).where(eq(tenants.id, ctx.tenantId))
+  const message = (tenant?.settings as TenantSettings | undefined)?.recruitment?.hiredMessage ?? RECRUITMENT_DEFAULTS.hiredMessage
+  const mail: Mail = { to: current.email, subject: `Boas notícias sobre a vaga ${current.jobTitle}`, text: message }
+  return {
+    employeeId: employee.id,
+    suggestCloseJob: job!.hiredCount >= job!.openings,
+    mail,
+    removedKeys: files.map(f => f.storageKey).filter(key => key !== keptKey),
+  }
 }
 
 export const rateApplication = async (tx: Tx, ctx: Ctx, id: string, rating: number | null) => {

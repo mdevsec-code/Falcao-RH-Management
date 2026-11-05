@@ -1,11 +1,11 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
-import { stageMove, uuid } from '@falcao-rh/contracts'
+import { employeeInput, stageMove, uuid } from '@falcao-rh/contracts'
 
 import type { AppDeps } from '../../app'
 import { ctxOf, requirePermission, tenantTx } from '../../http/context'
-import { addNote, applicationDetail, board, candidateFileUrl, moveApplication, rateApplication } from './applications.service'
+import { addNote, applicationDetail, board, candidateFileUrl, hireApplication, moveApplication, rateApplication } from './applications.service'
 
 const idParams = z.object({ id: uuid })
 
@@ -32,6 +32,19 @@ export const applicationRoutes =
       if (mail) await mailer.send(mail).catch(error => request.log.error(error, 'recusa: falha ao enviar e-mail'))
       return { ok: true }
     })
+
+    app.post(
+      '/applications/:id/hire',
+      { preHandler: [requirePermission('recruitment.manage'), requirePermission('employees.create')], schema: { params: idParams, body: employeeInput } },
+      async (request, reply) => {
+        const ctx = ctxOf(request)
+        const { employeeId, suggestCloseJob, mail, removedKeys } = await tenantTx(db, ctx, tx => hireApplication(tx, ctx, storage, request.params.id, request.body))
+        // Depois do commit: falha aqui não desfaz a contratação.
+        await mailer.send(mail).catch(error => request.log.error(error, 'contratação: falha ao enviar e-mail'))
+        for (const key of removedKeys) await storage.remove(key).catch(error => request.log.error(error, 'contratação: falha ao remover arquivo'))
+        return reply.status(201).send({ employeeId, suggestCloseJob })
+      },
+    )
 
     app.patch(
       '/applications/:id',

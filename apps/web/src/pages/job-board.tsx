@@ -244,7 +244,7 @@ export function JobBoardPage() {
         </div>
       </div>
 
-      <CandidateDrawer id={openId} stages={stages} onClose={() => setOpenId(null)} />
+      <CandidateDrawer id={openId} stages={stages} job={job.data} onClose={() => setOpenId(null)} />
       {canManage && job.data && <JobFormDrawer open={editing} onOpenChange={setEditing} job={job.data} />}
     </>
   )

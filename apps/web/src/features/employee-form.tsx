@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Info, UserCheck } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 import type { z } from 'zod'
@@ -16,7 +17,20 @@ import type { EmployeeDetail, EmployeeListItem, Page } from '../lib/types'
 type FormValues = z.input<typeof employeeInput>
 type Output = z.output<typeof employeeInput>
 
-const toForm = (e?: EmployeeDetail): FormValues =>
+export type HireResult = { employeeId: string; suggestCloseJob: boolean }
+
+/** Contratação: o formulário nasce preenchido e salva pela candidatura. */
+export type HireMode = {
+  applicationId: string
+  candidateName: string
+  jobTitle: string
+  prefill: Partial<FormValues>
+  /** Avisos sobre o que acontece ao contratar. */
+  notices: string[]
+  onHired: (result: HireResult) => void
+}
+
+const toForm = (e?: EmployeeDetail, prefill?: Partial<FormValues>): FormValues =>
   e
     ? {
         registration: e.registration,
@@ -35,7 +49,7 @@ const toForm = (e?: EmployeeDetail): FormValues =>
         contractType: e.contractType,
         workSchedule: e.workSchedule ?? '',
       }
-    : { registration: '', fullName: '', cpf: '', hireDate: '', contractType: 'clt' }
+    : { registration: '', fullName: '', cpf: '', hireDate: '', contractType: 'clt', ...prefill }
 
 /** Selects opcionais: "" no formulário vira null na API. */
 const optional = { setValueAs: (value: string | null) => (value ? value : null) }
@@ -45,11 +59,13 @@ export function EmployeeForm({
   onOpenChange,
   employee,
   onSaved,
+  hire,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   employee?: EmployeeDetail
   onSaved?: (id: string) => void
+  hire?: HireMode
 }) {
   const queryClient = useQueryClient()
   const departments = useQuery({ ...orgQueries.departments, enabled: open })
@@ -65,25 +81,32 @@ export function EmployeeForm({
 
   const form = useForm<FormValues, unknown, Output>({
     resolver: zodResolver(employeeInput),
-    values: toForm(employee),
+    values: toForm(employee, hire?.prefill),
     resetOptions: { keepDirtyValues: false },
   })
   const { register, handleSubmit, formState, setError } = form
   const errors = formState.errors
 
   const save = useMutation({
-    mutationFn: (values: Output) =>
-      employee
-        ? api<EmployeeDetail>(`/employees/${employee.id}`, { method: 'PATCH', body: values })
-        : api<EmployeeDetail>('/employees', { method: 'POST', body: values }),
+    mutationFn: (values: Output): Promise<EmployeeDetail | HireResult> =>
+      hire
+        ? api<HireResult>(`/applications/${hire.applicationId}/hire`, { method: 'POST', body: values })
+        : employee
+          ? api<EmployeeDetail>(`/employees/${employee.id}`, { method: 'PATCH', body: values })
+          : api<EmployeeDetail>('/employees', { method: 'POST', body: values }),
     onSuccess: saved => {
+      const id = 'employeeId' in saved ? saved.employeeId : saved.id
       void queryClient.invalidateQueries({ queryKey: ['employees'] })
-      void queryClient.invalidateQueries({ queryKey: ['employee', saved.id] })
+      void queryClient.invalidateQueries({ queryKey: ['employee', id] })
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       void queryClient.invalidateQueries({ queryKey: ['departments'] })
-      toast.success(employee ? 'Cadastro atualizado.' : 'Colaborador cadastrado.')
       onOpenChange(false)
-      onSaved?.(saved.id)
+      if ('employeeId' in saved) {
+        hire?.onHired(saved)
+        return
+      }
+      toast.success(employee ? 'Cadastro atualizado.' : 'Colaborador cadastrado.')
+      onSaved?.(id)
     },
     onError: error => {
       if (error instanceof ApiError && error.issues.length)
@@ -103,18 +126,36 @@ export function EmployeeForm({
     <Drawer
       open={open}
       onOpenChange={onOpenChange}
-      title={employee ? 'Editar cadastro' : 'Novo colaborador'}
-      description={employee ? employee.fullName : 'Campos com * são obrigatórios.'}
+      title={hire ? `Contratar ${hire.candidateName}` : employee ? 'Editar cadastro' : 'Novo colaborador'}
+      description={hire ? `Vaga: ${hire.jobTitle}. Confira os dados e complete o que falta.` : employee ? employee.fullName : 'Campos com * são obrigatórios.'}
       footer={
         <>
           <Button onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button variant="primary" onClick={submit} loading={save.isPending}>
-            {employee ? 'Salvar alterações' : 'Cadastrar colaborador'}
+            {hire ? (
+              <>
+                <UserCheck className="size-4" aria-hidden /> Contratar e criar cadastro
+              </>
+            ) : employee ? (
+              'Salvar alterações'
+            ) : (
+              'Cadastrar colaborador'
+            )}
           </Button>
         </>
       }
     >
       <form onSubmit={submit} className="flex flex-col gap-7" noValidate>
+        {hire && hire.notices.length > 0 && (
+          <ul className="flex flex-col gap-1.5 rounded-md border border-line bg-sunken/60 px-4 py-3 text-[13.5px] text-ink-soft">
+            {hire.notices.map(notice => (
+              <li key={notice} className="flex gap-2">
+                <Info className="mt-0.5 size-4 shrink-0 text-steel" aria-hidden />
+                {notice}
+              </li>
+            ))}
+          </ul>
+        )}
         <fieldset className="grid gap-4 sm:grid-cols-2">
           <legend className="mb-3 font-display text-xl font-semibold text-ink">Dados pessoais</legend>
           <Field label="Nome completo" required error={errors.fullName?.message} className="sm:col-span-2">

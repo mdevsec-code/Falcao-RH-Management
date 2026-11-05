@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, Download, FileClock, FileText, Mail, MapPin, MessageCircle, Phone, ShieldAlert, Star } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { Ban, Download, FileClock, FileText, Mail, MapPin, MessageCircle, Phone, ShieldAlert, Star, UserCheck } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
+
+import { formatCpf } from '@falcao-rh/contracts'
 
 import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
@@ -9,8 +12,10 @@ import { Textarea } from '../components/ui/field'
 import { Avatar, Badge, Skeleton } from '../components/ui/layout'
 import { api, ApiError, openDownload } from '../lib/api'
 import { cn } from '../lib/cn'
-import { displayCpf } from '../lib/format'
-import type { ApplicationDetail, JobBoard } from '../lib/types'
+import { displayCpf, todayIso } from '../lib/format'
+import { useCan } from '../lib/session'
+import type { ApplicationDetail, JobBoard, JobDetail } from '../lib/types'
+import { EmployeeForm, type HireMode, type HireResult } from './employee-form'
 
 const when = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
@@ -19,8 +24,13 @@ const when = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-di
  * respostas, notas internas e histórico. Gestor vê só o que precisa para
  * conduzir a vaga (sem CPF nem outras candidaturas).
  */
-export function CandidateDrawer({ id, stages, onClose }: { id: string | null; stages: JobBoard['stages']; onClose: () => void }) {
+export function CandidateDrawer({ id, stages, job, onClose }: { id: string | null; stages: JobBoard['stages']; job?: JobDetail; onClose: () => void }) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const canManage = useCan('recruitment.manage')
+  const canCreateEmployee = useCan('employees.create')
+  const canHire = canManage && canCreateEmployee
+  const [hiring, setHiring] = useState(false)
   const query = useQuery({ queryKey: ['application', id], queryFn: () => api<ApplicationDetail>(`/applications/${id}`), enabled: Boolean(id) })
   const a = query.data
   const [rejecting, setRejecting] = useState(false)
@@ -63,7 +73,67 @@ export function CandidateDrawer({ id, stages, onClose }: { id: string | null; st
     }
   }
 
+  const closeJob = useMutation({
+    mutationFn: () => api(`/jobs/${job!.id}/status`, { method: 'POST', body: { status: 'closed' } }),
+    onSuccess: async () => {
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['job', job!.id] }), queryClient.invalidateQueries({ queryKey: ['jobs'] })])
+      toast.success('Vaga encerrada.')
+    },
+    onError: fail,
+  })
+
+  const onHired = ({ employeeId, suggestCloseJob }: HireResult) => {
+    const name = a!.candidate.fullName
+    void queryClient.invalidateQueries({ queryKey: ['job-board'] })
+    void queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    void queryClient.invalidateQueries({ queryKey: ['job', job?.id] })
+    queryClient.removeQueries({ queryKey: ['application', id] })
+    onClose()
+    toast.success(`${name} agora é colaborador.`, {
+      description: 'O candidato foi avisado por e-mail.',
+      action: { label: 'Ver cadastro', onClick: () => void navigate({ to: '/colaboradores/$id', params: { id: employeeId } }) },
+    })
+    if (suggestCloseJob)
+      toast('Todas as posições desta vaga foram preenchidas.', {
+        description: 'Quer encerrar a vaga? Ela sai da página de vagas.',
+        duration: 15_000,
+        action: { label: 'Encerrar vaga', onClick: () => closeJob.mutate() },
+      })
+  }
+
+  const inFirstStage = a?.stageId === stages[0]?.id
+  const hireMode: HireMode | undefined =
+    a && job
+      ? {
+          applicationId: a.id,
+          candidateName: a.candidate.fullName,
+          jobTitle: a.jobTitle,
+          prefill: {
+            fullName: a.candidate.fullName,
+            cpf: a.candidate.cpf ? formatCpf(a.candidate.cpf) : '',
+            email: a.candidate.email,
+            phone: a.candidate.phone,
+            hireDate: todayIso(),
+            contractType: job.contractType,
+            departmentId: job.departmentId,
+            positionId: job.positionId,
+            unitId: job.unitId,
+          },
+          notices: [
+            a.file?.scanStatus === 'clean'
+              ? 'O currículo vai para os documentos do colaborador, na categoria Currículo.'
+              : a.file
+                ? 'O currículo não passou pela verificação de segurança e não será levado para o cadastro.'
+                : 'Esta candidatura não tem currículo para levar ao cadastro.',
+            'A ficha de candidato é apagada: os dados passam a viver no cadastro do colaborador.',
+            ...(a.otherApplications?.length ? ['As outras candidaturas desta pessoa também serão encerradas.'] : []),
+          ],
+          onHired,
+        }
+      : undefined
+
   return (
+    <>
     <Drawer
       open={Boolean(id)}
       onOpenChange={open => {
@@ -119,12 +189,20 @@ export function CandidateDrawer({ id, stages, onClose }: { id: string | null; st
                     </button>
                   )
                 })}
+                {a.status === 'open' && canHire && job && !inFirstStage && !rejecting && (
+                  <Button size="sm" variant="primary" className="h-9" onClick={() => setHiring(true)}>
+                    <UserCheck className="size-4" aria-hidden /> Contratar
+                  </Button>
+                )}
                 {a.status === 'open' && !rejecting && (
                   <Button size="sm" variant="ghost" className="h-9 text-danger hover:bg-danger-soft hover:text-danger" onClick={() => setRejecting(true)}>
                     <Ban className="size-4" aria-hidden /> Recusar
                   </Button>
                 )}
               </div>
+              {a.status === 'open' && canHire && inFirstStage && (
+                <p className="mt-2.5 text-[12.5px] text-steel">Para contratar, mova o candidato para além de {stages[0]?.name}.</p>
+              )}
               {a.status === 'rejected' && a.rejectionReason && (
                 <p className="mt-3 rounded-md border border-danger/20 bg-danger-soft px-3.5 py-2.5 text-[13.5px] text-ink-soft">
                   Motivo da recusa: {a.rejectionReason}. Para reabrir, escolha uma etapa acima.
@@ -275,6 +353,8 @@ export function CandidateDrawer({ id, stages, onClose }: { id: string | null; st
         </div>
       )}
     </Drawer>
+    {hireMode && <EmployeeForm open={hiring} onOpenChange={setHiring} hire={hireMode} />}
+    </>
   )
 }
 

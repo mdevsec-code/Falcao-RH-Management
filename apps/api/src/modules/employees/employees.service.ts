@@ -186,7 +186,7 @@ const event = (
   ...data,
 })
 
-export const createEmployee = async (tx: Tx, ctx: Ctx, input: EmployeeInput) => {
+export const createEmployee = async (tx: Tx, ctx: Ctx, input: EmployeeInput, options: { hiredReason?: string } = {}) => {
   const [row] = await tx
     .insert(employees)
     .values({ ...input, tenantId: ctx.tenantId })
@@ -195,6 +195,7 @@ export const createEmployee = async (tx: Tx, ctx: Ctx, input: EmployeeInput) => 
     event(ctx, row!.id, 'hired', {
       effectiveDate: input.hireDate,
       after: { departmentId: input.departmentId ?? null, positionId: input.positionId ?? null },
+      reason: options.hiredReason ?? null,
     }),
   )
   await audit(tx, ctx, { action: 'create', entity: 'employee', entityId: row!.id })

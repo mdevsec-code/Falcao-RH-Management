@@ -151,7 +151,7 @@ function Summary({ jobs, loading }: { jobs: JobListItem[]; loading: boolean }) {
     return {
       published: jobs.filter(j => j.status === 'published').length,
       inProcess: open.reduce((sum, j) => sum + Object.values(j.counts.stages).reduce((a, b) => a + b, 0), 0),
-      hired: jobs.reduce((sum, j) => sum + j.counts.hired, 0),
+      hired: jobs.reduce((sum, j) => sum + j.hiredCount, 0),
       positions: open.reduce((sum, j) => sum + Math.max(0, j.openings - j.hiredCount), 0),
     }
   }, [jobs])
