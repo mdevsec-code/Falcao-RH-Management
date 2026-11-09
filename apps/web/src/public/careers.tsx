@@ -18,7 +18,7 @@ import { PublicFrame } from './public-frame'
 const DEFAULT_HERO: CareerPageContent['hero'] = {
   enabled: true,
   title: 'Construa sua carreira na Falcão',
-  subtitle: 'Vagas abertas em obras e no escritório. Venha fazer parte.',
+  subtitle: 'Construção civil em grandes fábricas do ramo automotivo internacional. Venha fazer parte.',
   imageId: null,
 }
 
@@ -231,7 +231,7 @@ function JobList({ slug, jobs, loading }: { slug: string; jobs?: PublicJob[]; lo
           <Input value={q} onChange={e => setQ(e.target.value)} placeholder="Cargo, área ou cidade" aria-label="Buscar vagas" className="h-11 rounded-full pl-10" />
         </label>
         {cities.length > 1 && (
-          <Select aria-label="Cidade" value={city} onChange={e => setCity(e.target.value)} className="h-11 w-auto [&_select]:rounded-full">
+          <Select aria-label="Cidade" value={city} onChange={e => setCity(e.target.value)} className="h-11 w-auto [&_button]:rounded-full">
             <option value="">Todas as cidades</option>
             {cities.map(c => (
               <option key={c} value={c}>

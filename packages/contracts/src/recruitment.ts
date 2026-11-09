@@ -307,10 +307,10 @@ export const DEFAULT_CAREER_PAGE: CareerPageContent = {
   hero: {
     enabled: true,
     title: 'Construa sua carreira na Falcão',
-    subtitle: 'Vagas abertas em obras e no escritório. Venha fazer parte.',
+    subtitle: 'Construção civil em grandes fábricas do ramo automotivo internacional. Venha fazer parte.',
     imageId: null,
   },
-  about: { enabled: true, title: 'Sobre a Falcão', body: '', imageIds: [] },
+  about: { enabled: true, title: 'Sobre a Falcão', body: 'A Falcão atua na construção civil e lidera a construção de grandes fábricas do ramo automotivo internacional.', imageIds: [] },
   benefits: {
     enabled: true,
     title: 'Por que trabalhar aqui',

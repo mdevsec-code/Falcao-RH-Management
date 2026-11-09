@@ -46,7 +46,8 @@ test('cadastra um colaborador e o encontra na busca e na ficha', async ({ page }
   await drawer.getByLabel('CPF').fill(cpf)
   await drawer.getByLabel('Matrícula').fill(registration)
   await drawer.getByLabel('Data de admissão').fill('2026-10-01')
-  await drawer.getByLabel('Departamento').selectOption({ label: 'Engenharia' })
+  await drawer.getByLabel('Departamento').click()
+  await page.getByRole('menuitemradio', { name: 'Engenharia' }).click()
   await shot(page, '04-formulario')
   await drawer.getByRole('button', { name: 'Cadastrar colaborador' }).click()
 
