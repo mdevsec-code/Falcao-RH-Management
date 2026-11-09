@@ -118,6 +118,7 @@ const parseForm = (fields: Record<string, string>): ApplicationForm => {
     answers,
     privacyConsent: fields.privacyConsent === 'true',
     talentPoolConsent: fields.talentPoolConsent === 'true',
+    truthDeclaration: fields.truthDeclaration === 'true',
     website: fields.website ?? '',
     startedAt: Number(fields.startedAt),
   })

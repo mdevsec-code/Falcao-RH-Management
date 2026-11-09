@@ -4,7 +4,7 @@ import { ArrowLeft, Banknote, Briefcase, Building2, Check, CircleAlert, Clock, M
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
-import { CONTRACT_TYPE_LABELS, WORK_MODE_LABELS } from '@falcao-rh/contracts'
+import { CONTRACT_TYPE_LABELS, WORK_MODE_LABELS, TRUTH_DECLARATION } from '@falcao-rh/contracts'
 
 import { RevealScope } from '../components/motion'
 import { Button } from '../components/ui/button'
@@ -16,7 +16,7 @@ import { cn } from '../lib/cn'
 import { cpfStatus, maskCpf } from '../lib/masks'
 import { gsap, MOTION, useGSAP } from '../lib/gsap'
 import { Paragraphs } from './career-page-view'
-import { formatSalary, postedAgo, publicApi, type PublicJobDetail, type PublicQuestion } from './public-api'
+import { postedAgo, publicApi, type PublicJobDetail, type PublicQuestion } from './public-api'
 import { PublicFrame } from './public-frame'
 
 const UFS = 'AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO'.split(' ')
@@ -54,7 +54,6 @@ export function JobPage() {
 }
 
 function JobDetail({ slug, token, job }: { slug: string; token: string; job: PublicJobDetail }) {
-  const salary = formatSalary(job.salary)
   // Emojis dos benefícios vêm da página de vagas (a mesma consulta da lista, em cache).
   const careers = useQuery({ queryKey: ['careers', slug], queryFn: () => publicApi.careers(slug) })
   const benefitEmojis = new Map((careers.data?.page?.benefits.items ?? []).map(b => [b.title, b.icon]))
@@ -85,7 +84,7 @@ function JobDetail({ slug, token, job }: { slug: string; token: string; job: Pub
               </Chip>
               <Chip icon={Building2}>{WORK_MODE_LABELS[job.workMode]}</Chip>
               <Chip icon={Briefcase}>{CONTRACT_TYPE_LABELS[job.contractType]}</Chip>
-              {salary && <Chip icon={Banknote}>{salary}</Chip>}
+              <Chip icon={Banknote}>Salário compatível com o mercado</Chip>
               {job.publishedAt && <Chip icon={Clock}>{postedAgo(job.publishedAt)}</Chip>}
             </div>
           </div>
@@ -198,6 +197,7 @@ type FormState = {
   linkedin: string
   talentPoolConsent: boolean
   privacyConsent: boolean
+  truthDeclaration: boolean
 }
 
 function ApplicationForm({ slug, token, job }: { slug: string; token: string; job: PublicJobDetail }) {
@@ -212,6 +212,7 @@ function ApplicationForm({ slug, token, job }: { slug: string; token: string; jo
     linkedin: '',
     talentPoolConsent: true,
     privacyConsent: false,
+    truthDeclaration: false,
   })
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [file, setFile] = useState<File | null>(null)
@@ -241,6 +242,7 @@ function ApplicationForm({ slug, token, job }: { slug: string; token: string; jo
     form.state &&
     file &&
     form.privacyConsent &&
+    form.truthDeclaration &&
     !missingAnswer
 
   const submit = (event: FormEvent) => {
@@ -331,6 +333,12 @@ function ApplicationForm({ slug, token, job }: { slug: string; token: string; jo
         />
 
         <div className="flex flex-col gap-2 pt-1">
+          <CheckCard
+            checked={form.truthDeclaration}
+            onChange={checked => setForm({ ...form, truthDeclaration: checked })}
+            label="Declaração de veracidade"
+            description={TRUTH_DECLARATION}
+          />
           <CheckCard
             checked={form.privacyConsent}
             onChange={checked => setForm({ ...form, privacyConsent: checked })}

@@ -48,6 +48,7 @@ const validForm = (extra: Form = {}): Form => ({
   state: 'PE',
   cpf: '529.982.247-25',
   privacyConsent: 'true',
+  truthDeclaration: 'true',
   talentPoolConsent: 'true',
   website: '',
   startedAt: String(Date.now() - 60_000),
@@ -149,7 +150,7 @@ describe('candidatura pública', () => {
     expect(application!.retentionUntil).not.toBeNull()
 
     const [event] = await t.db.select().from(applicationEvents).where(eq(applicationEvents.applicationId, application!.id))
-    expect(event).toMatchObject({ toLabel: 'Novo', actorUserId: null, fromStageId: null })
+    expect(event).toMatchObject({ toLabel: 'Cadastro do candidato', actorUserId: null, fromStageId: null })
 
     const [file] = await t.db.select().from(candidateFiles).where(eq(candidateFiles.applicationId, application!.id))
     expect(file).toMatchObject({ scanStatus: 'pending', filename: 'curriculo.pdf' })
@@ -205,6 +206,12 @@ describe('candidatura pública', () => {
     expect((await apply('vagas', jobs.main!.token, validForm({ email: 'cpf.errado@exemplo.com', cpf: '111.111.111-11' }))).statusCode).toBe(400)
     const [saved] = await t.db.select({ cpf: candidates.cpf }).from(candidates).where(eq(candidates.email, 'maria.silva@exemplo.com'))
     expect(saved!.cpf).toBe('52998224725')
+  })
+
+  it('exige a declaração de veracidade', async () => {
+    const response = await apply('vagas', jobs.main!.token, validForm({ email: 'sem.declaracao@exemplo.com', truthDeclaration: 'false' }))
+    expect(response.statusCode).toBe(400)
+    expect(response.json().message).toBe('Confirme que as informações são verdadeiras.')
   })
 
   it('valida o formulário (consentimento obrigatório)', async () => {

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { Ban, Download, FileClock, FileText, Mail, MapPin, MessageCircle, Phone, ShieldAlert, Star, UserCheck } from 'lucide-react'
+import { Ban, ClipboardList, Download, FileClock, FileText, Mail, MapPin, MessageCircle, Phone, ShieldAlert, Star, UserCheck } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -224,6 +224,26 @@ export function CandidateDrawer({ id, stages, job, onClose }: { id: string | nul
                   </div>
                 </div>
               )}
+            </Section>
+          )}
+
+          {a.status !== 'rejected' && (
+            <Section title="Admissão">
+              <a
+                href={`/impressos/documentos-admissao/${a.id}`}
+                target="_blank"
+                rel="noopener"
+                className="flex items-center gap-3 rounded-md border border-line bg-paper px-4 py-3 shadow-xs transition-colors hover:border-steel-soft"
+              >
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-night text-brand">
+                  <ClipboardList className="size-5" aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-medium text-ink">Relação de documentos para admissão</span>
+                  <span className="block text-[12.5px] text-steel">PDF com o nome do candidato e a função, pronto para entregar.</span>
+                </span>
+                <Download className="size-4 shrink-0 text-steel" aria-hidden />
+              </a>
             </Section>
           )}
 

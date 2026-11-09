@@ -26,15 +26,18 @@ export const APPLICATION_OUTCOME_LABELS: Record<ApplicationOutcome, string> = {
   reopened: 'Reaberta',
 }
 
-/** Etapas iniciais de toda organização. A primeira é fixa: não muda de nome nem sai. */
-export const DEFAULT_STAGES = ['Novo', 'Triagem', 'Entrevista', 'Proposta'] as const
-export const MAX_STAGES = 12
+/**
+ * Etapas de contratação de toda organização (definidas pela Falcão em
+ * 09/11/2026). A primeira é fixa: não muda de nome nem sai.
+ */
+export const DEFAULT_STAGES = ['Cadastro do candidato', 'Triagem', 'Entrevista/agendamento', 'Teste prático', 'Pesquisa de referência', 'Exame admissional', 'Solicitação de documentos', 'Resultados da seleção', 'Admissão'] as const
+export const MAX_STAGES = 15
 
 const stageKey = (name: string) => name.trim().toLocaleLowerCase('pt-BR')
 
 /**
  * Lista completa das etapas, na ordem. A primeira é sempre a etapa fixa
- * (Novo): o nome dela é ignorado. Itens com `id` renomeiam/reordenam; sem
+ * (Cadastro do candidato): o nome dela é ignorado. Itens com `id` renomeiam/reordenam; sem
  * `id`, criam; etapas que ficarem de fora são removidas.
  */
 export const stagesInput = z.object({
@@ -163,12 +166,17 @@ export const applicationForm = z.object({
   answers: z.record(z.string(), z.string().trim().max(2000)).default({}),
   privacyConsent: z.literal(true, { error: 'É necessário aceitar a política de privacidade.' }),
   talentPoolConsent: z.boolean().default(false),
+  /** Declaração de veracidade: sem ela a candidatura não é aceita. */
+  truthDeclaration: z.literal(true, { error: 'Confirme que as informações são verdadeiras.' }),
   /** Honeypot: humanos não veem este campo; bots o preenchem. */
   website: z.string().max(0),
   /** Momento em que o formulário foi aberto (anti-bot por tempo de preenchimento). */
   startedAt: z.number(),
 })
 export type ApplicationForm = z.infer<typeof applicationForm>
+
+/** Texto da declaração de veracidade mostrado no formulário. */
+export const TRUTH_DECLARATION = 'Declaro que as informações prestadas e o currículo enviado são verdadeiros. Sei que informações falsas podem me desclassificar do processo seletivo.'
 
 // ---------- funil ----------
 
@@ -321,7 +329,7 @@ export const DEFAULT_CAREER_PAGE: CareerPageContent = {
       { icon: '🍽️', title: 'Refeição', text: 'Almoço e café da manhã.' },
       { icon: '🩺', title: 'Plano de Saúde', text: 'Sem descontos de mensalidades ou coparticipações, sendo custeado 100% pela empresa.' },
       { icon: '🦷', title: 'Plano Odontológico', text: 'Mais cuidado com a sua saúde bucal.' },
-      { icon: '📈', title: 'PPR', text: 'Programa de Participação nos resultados.' },
+      { icon: '📈', title: 'PPR', text: 'Participação nos resultados conforme a CCT (Convenção Coletiva de Trabalho).' },
       { icon: '🚀', title: 'Crescimento e desenvolvimento', text: '' },
     ],
   },

@@ -41,7 +41,7 @@ export const listStages = async (tx: Tx) => {
   return stages.map(stage => ({ ...stage, openApplications: totals.get(stage.id) ?? 0 }))
 }
 
-const INITIAL_FIRST = 'A etapa Novo é sempre a primeira.'
+const INITIAL_FIRST = `A etapa ${DEFAULT_STAGES[0]} é sempre a primeira.`
 
 /**
  * Substitui a lista de etapas: renomeia e reordena as que vêm com `id`, cria

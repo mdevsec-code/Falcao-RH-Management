@@ -52,7 +52,7 @@ export const fileScanStatusEnum = pgEnum('file_scan_status', ['pending', 'clean'
 // ---------- etapas do processo seletivo ----------
 
 /**
- * Etapas do quadro, por organização (spec 5.8). A inicial (Novo) é fixa e
+ * Etapas do quadro, por organização (spec 5.8). A inicial (Cadastro do candidato) é fixa e
  * fica na posição 0. `(tenant_id, position)` é única e adiável (reordenar
  * troca posições), na migração 0007.
  */

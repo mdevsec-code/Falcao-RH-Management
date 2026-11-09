@@ -275,8 +275,8 @@ const resumeCategoryId = async (tx: Tx, ctx: Ctx) => {
 export const hireApplication = async (tx: Tx, ctx: Ctx, storage: Storage, id: string, input: EmployeeInput) => {
   const current = await applicationInScope(tx, ctx, id)
   if (current.status !== 'open') throw new AppError(409, 'not_open', 'Só candidaturas em andamento podem ser contratadas.')
-  const [stage] = await tx.select({ isInitial: recruitmentStages.isInitial }).from(recruitmentStages).where(eq(recruitmentStages.id, current.stageId!))
-  if (stage?.isInitial) throw new AppError(409, 'initial_stage', 'Mova o candidato para além de Novo antes de contratar.')
+  const [stage] = await tx.select({ isInitial: recruitmentStages.isInitial, name: recruitmentStages.name }).from(recruitmentStages).where(eq(recruitmentStages.id, current.stageId!))
+  if (stage?.isInitial) throw new AppError(409, 'initial_stage', `Mova o candidato para além da etapa ${stage.name} antes de contratar.`)
 
   const employee = await createEmployee(tx, ctx, input, { hiredReason: `Admissão via vaga ${current.jobTitle}` })
 

@@ -1,5 +1,5 @@
 /**
- * Etapas do recrutamento personalizáveis por organização (spec 5.8): Novo é
+ * Etapas do recrutamento personalizáveis por organização (spec 5.8): a inicial é
  * fixa e sempre a primeira; as demais são renomeadas, reordenadas, criadas e
  * removidas pelo RH. Etapa com candidatura em andamento não sai.
  */
@@ -18,6 +18,7 @@ import { withTenant } from '../src/db/client'
 import { createTenant } from '../src/db/provision'
 import { rowsOf } from '../src/db/rows'
 import * as schema from '../src/db/schema'
+import { DEFAULT_STAGES } from '@falcao-rh/contracts'
 import { createTestApp, type TestApp } from './harness'
 
 type Stage = { id: string; name: string; position: number; isInitial: boolean; openApplications: number }
@@ -64,37 +65,26 @@ const insertApplication = async (tenantId: string, stageId: string | null, statu
 const byName = (stages: Stage[], name: string) => stages.find(s => s.name === name)!
 
 describe('etapas do recrutamento', () => {
-  it('organização nova tem as 4 etapas iniciais, na ordem, com Novo fixa', async () => {
+  it('organização nova tem as 9 etapas de contratação, na ordem, com a inicial fixa', async () => {
     const stages = await getStages(a.users.admin!.cookie)
-    expect(stages.map(s => [s.name, s.position, s.isInitial, s.openApplications])).toEqual([
-      ['Novo', 0, true, 0],
-      ['Triagem', 1, false, 0],
-      ['Entrevista', 2, false, 0],
-      ['Proposta', 3, false, 0],
-    ])
+    expect(stages.map(s => [s.name, s.position, s.isInitial, s.openApplications])).toEqual(DEFAULT_STAGES.map((name, i) => [name, i, i === 0, 0]))
   })
 
   it('o gestor lê as etapas, mas não altera', async () => {
     const stages = await getStages(a.users.manager!.cookie)
-    expect(stages).toHaveLength(4)
+    expect(stages).toHaveLength(DEFAULT_STAGES.length)
     const response = await putStages(a.users.manager!.cookie, stages)
     expect(response.statusCode).toBe(403)
   })
 
   it('reordena e acrescenta "Exame admissional (ASO)", mantendo os ids', async () => {
     const before = await getStages(a.users.hr!.cookie)
-    const [novo, triagem, entrevista, proposta] = before
-    const response = await putStages(a.users.hr!.cookie, [
-      novo!,
-      entrevista!,
-      triagem!,
-      { name: 'Exame admissional (ASO)' },
-      proposta!,
-    ])
+    const [inicial, triagem, entrevista, ...rest] = before
+    const response = await putStages(a.users.hr!.cookie, [inicial!, entrevista!, triagem!, { name: 'Exame admissional (ASO)' }, ...rest])
     expect(response.statusCode).toBe(200)
     const after = response.json<Stage[]>()
-    expect(after.map(s => s.name)).toEqual(['Novo', 'Entrevista', 'Triagem', 'Exame admissional (ASO)', 'Proposta'])
-    expect(after.map(s => s.position)).toEqual([0, 1, 2, 3, 4])
+    expect(after.map(s => s.name)).toEqual([DEFAULT_STAGES[0], 'Entrevista/agendamento', 'Triagem', 'Exame admissional (ASO)', ...DEFAULT_STAGES.slice(3)])
+    expect(after.map(s => s.position)).toEqual(after.map((_, i) => i))
     expect(after[1]!.id).toBe(entrevista!.id)
     expect(after[2]!.id).toBe(triagem!.id)
     expect(await getStages(a.users.hr!.cookie)).toEqual(after)
@@ -118,7 +108,7 @@ describe('etapas do recrutamento', () => {
 
   it('nome repetido → 400', async () => {
     const stages = await getStages(a.users.hr!.cookie)
-    const response = await putStages(a.users.hr!.cookie, [...stages, { name: ' proposta ' }])
+    const response = await putStages(a.users.hr!.cookie, [...stages, { name: ' admissão ' }])
     expect(response.statusCode).toBe(400)
   })
 
@@ -127,7 +117,7 @@ describe('etapas do recrutamento', () => {
     const response = await putStages(a.users.hr!.cookie, [{ id: stages[0]!.id, name: 'Recebidos' }, ...stages.slice(1)])
     expect(response.statusCode).toBe(200)
     const [first] = response.json<Stage[]>()
-    expect(first).toMatchObject({ id: stages[0]!.id, name: 'Novo', position: 0, isInitial: true })
+    expect(first).toMatchObject({ id: stages[0]!.id, name: 'Cadastro do candidato', position: 0, isInitial: true })
   })
 
   it('a etapa inicial não sai da primeira posição', async () => {
@@ -138,23 +128,23 @@ describe('etapas do recrutamento', () => {
 
   it('remover etapa com candidatura em andamento → 409', async () => {
     const stages = await getStages(a.users.hr!.cookie)
-    const proposta = byName(stages, 'Proposta')
+    const proposta = byName(stages, 'Teste prático')
     await insertApplication(a.tenant.id, proposta.id)
-    expect(byName(await getStages(a.users.hr!.cookie), 'Proposta').openApplications).toBe(1)
+    expect(byName(await getStages(a.users.hr!.cookie), 'Teste prático').openApplications).toBe(1)
 
     const response = await putStages(
       a.users.hr!.cookie,
       stages.filter(s => s.id !== proposta.id),
     )
     expect(response.statusCode).toBe(409)
-    expect(response.json().message).toBe('Mova os candidatos antes de remover a etapa Proposta.')
-    expect((await getStages(a.users.hr!.cookie)).map(s => s.name)).toContain('Proposta')
+    expect(response.json().message).toBe('Mova os candidatos antes de remover a etapa Teste prático.')
+    expect((await getStages(a.users.hr!.cookie)).map(s => s.name)).toContain('Teste prático')
   })
 
   it('remove etapa vazia, e a que só tem candidaturas encerradas, preservando o histórico', async () => {
     const stages = await getStages(a.users.hr!.cookie)
     const aso = byName(stages, 'Exame admissional (ASO)')
-    const entrevista = byName(stages, 'Entrevista')
+    const entrevista = byName(stages, 'Entrevista/agendamento')
     // Candidatura recusada que estava na Entrevista, com o evento da mudança.
     const application = await insertApplication(a.tenant.id, entrevista.id, 'rejected')
     await t.db.execute(sql`
@@ -166,8 +156,10 @@ describe('etapas do recrutamento', () => {
       stages.filter(s => s.id !== aso.id && s.id !== entrevista.id),
     )
     expect(response.statusCode).toBe(200)
-    expect(response.json<Stage[]>().map(s => s.name)).toEqual(['Novo', 'Triagem de currículos', 'Proposta'])
-    expect(response.json<Stage[]>().map(s => s.position)).toEqual([0, 1, 2])
+    const left = stages.filter(s => s.id !== aso.id && s.id !== entrevista.id).map(s => s.name)
+    expect(response.json<Stage[]>().map(s => s.name)).toEqual(left)
+    expect(left).toEqual([DEFAULT_STAGES[0], 'Triagem de currículos', ...DEFAULT_STAGES.slice(3)])
+    expect(response.json<Stage[]>().map(s => s.position)).toEqual(left.map((_, i) => i))
 
     const [app] = rowsOf<{ status: string; stage_id: string | null }>(
       await t.db.execute(sql`select status, stage_id from applications where id = ${application}`),
@@ -177,19 +169,19 @@ describe('etapas do recrutamento', () => {
       await t.db.execute(sql`
         select from_stage_id, from_label, to_stage_id, to_label from application_events where application_id = ${application}`),
     )
-    expect(event).toEqual({ from_stage_id: stages[0]!.id, from_label: 'Novo', to_stage_id: null, to_label: 'Entrevista' })
+    expect(event).toEqual({ from_stage_id: stages[0]!.id, from_label: 'Cadastro do candidato', to_stage_id: null, to_label: 'Entrevista/agendamento' })
   })
 
   it('isolamento: a empresa A não lê nem usa as etapas da B', async () => {
     const stagesA = await getStages(a.users.admin!.cookie)
     const stagesB = await getStages(b.users.admin!.cookie)
-    expect(stagesB.map(s => s.name)).toEqual(['Novo', 'Triagem', 'Entrevista', 'Proposta'])
+    expect(stagesB.map(s => s.name)).toEqual([...DEFAULT_STAGES])
     const idsB = new Set(stagesB.map(s => s.id))
     expect(stagesA.some(s => idsB.has(s.id))).toBe(false)
 
     const response = await putStages(a.users.admin!.cookie, [...stagesA, { id: stagesB[1]!.id, name: 'Roubada' }])
     expect(response.statusCode).toBe(400)
-    expect((await getStages(b.users.admin!.cookie)).map(s => s.name)).toEqual(['Novo', 'Triagem', 'Entrevista', 'Proposta'])
+    expect((await getStages(b.users.admin!.cookie)).map(s => s.name)).toEqual([...DEFAULT_STAGES])
   })
 })
 
@@ -200,7 +192,7 @@ describe('etapa inicial protegida no banco', () => {
       (error: { cause?: { message?: string } }) => error.cause?.message ?? '',
     )
 
-  it('a aplicação não apaga nem renomeia Novo', async () => {
+  it('a aplicação não apaga nem renomeia a etapa inicial', async () => {
     expect(await asA(sql`delete from recruitment_stages where is_initial`)).toMatch(/etapa inicial/)
     expect(await asA(sql`update recruitment_stages set name = 'Outro' where is_initial`)).toMatch(/etapa inicial/)
     expect(await asA(sql`update recruitment_stages set is_initial = false where is_initial`)).toMatch(/etapa inicial/)
@@ -255,7 +247,12 @@ describe('migração das etapas (0006/0007) com dados existentes', () => {
           (${tenant}, ${apps.offer}, 'rejected', 'offer', null),
           (${tenant}, ${apps.offer}, null, null, 'Currículo removido')`)
 
-      await migrate(db, { migrationsFolder: source })
+      const upTo8 = await mkdtemp(join(tmpdir(), 'falcao-mig8-'))
+      await cp(source, upTo8, { recursive: true })
+      const journal8 = JSON.parse(await readFile(join(upTo8, 'meta', '_journal.json'), 'utf8')) as { entries: { idx: number }[] }
+      journal8.entries = journal8.entries.filter(e => e.idx <= 8)
+      await writeFile(join(upTo8, 'meta', '_journal.json'), JSON.stringify(journal8))
+      await migrate(db, { migrationsFolder: upTo8 })
 
       const stages = rowsOf<{ id: string; name: string; position: number; is_initial: boolean }>(
         await db.execute(sql`select id, name, position, is_initial from recruitment_stages where tenant_id = ${tenant} order by position`),
@@ -307,6 +304,48 @@ describe('migração das etapas (0006/0007) com dados existentes', () => {
         ]),
       )
       expect(events).toHaveLength(5)
+    } finally {
+      await client.close()
+    }
+  })
+})
+
+describe('migração das etapas de contratação (0009)', () => {
+  it('renomeia as etapas padrão mantendo os ids, acrescenta as novas e deixa as do RH no fim', async () => {
+    const source = fileURLToPath(new URL('../migrations', import.meta.url))
+    const before = await mkdtemp(join(tmpdir(), 'falcao-mig9-'))
+    await cp(source, before, { recursive: true })
+    const journalPath = join(before, 'meta', '_journal.json')
+    const journal = JSON.parse(await readFile(journalPath, 'utf8')) as { entries: { idx: number }[] }
+    journal.entries = journal.entries.filter(e => e.idx <= 8)
+    await writeFile(journalPath, JSON.stringify(journal))
+
+    const client = new PGlite()
+    const db = drizzle(client, { schema })
+    try {
+      await migrate(db, { migrationsFolder: before })
+      const tenant = randomUUID()
+      await db.execute(sql`insert into tenants (id, name, slug) values (${tenant}, 'Antiga', 'antiga-9')`)
+      await db.execute(sql`
+        insert into recruitment_stages (tenant_id, name, position, is_initial) values
+          (${tenant}, 'Novo', 0, true), (${tenant}, 'Triagem', 1, false), (${tenant}, 'Entrevista', 2, false),
+          (${tenant}, 'Integração', 3, false), (${tenant}, 'Proposta', 4, false)`)
+      const old = Object.fromEntries(
+        rowsOf<{ id: string; name: string }>(await db.execute(sql`select id, name from recruitment_stages where tenant_id = ${tenant}`)).map(s => [s.name, s.id]),
+      )
+
+      await migrate(db, { migrationsFolder: source })
+
+      const stages = rowsOf<{ id: string; name: string; position: number; is_initial: boolean }>(
+        await db.execute(sql`select id, name, position, is_initial from recruitment_stages where tenant_id = ${tenant} order by position`),
+      )
+      expect(stages.map(s => s.name)).toEqual([...DEFAULT_STAGES, 'Integração'])
+      expect(stages.map(s => s.position)).toEqual(stages.map((_, i) => i))
+      expect(stages[0]).toMatchObject({ id: old.Novo, is_initial: true })
+      const byNewName = Object.fromEntries(stages.map(s => [s.name, s.id]))
+      expect(byNewName['Entrevista/agendamento']).toBe(old.Entrevista)
+      expect(byNewName['Resultados da seleção']).toBe(old.Proposta)
+      expect(byNewName.Integração).toBe(old.Integração)
     } finally {
       await client.close()
     }

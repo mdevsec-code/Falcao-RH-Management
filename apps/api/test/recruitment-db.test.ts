@@ -183,7 +183,7 @@ describe('role pública (falcao_public)', () => {
     // O rótulo do evento vem do banco, não de quem grava.
     const [event] = await rows(db, sql`
       select from_stage_id, from_label, to_stage_id, to_label, outcome from application_events where application_id = ${applicationId}`)
-    expect(event).toEqual({ from_stage_id: null, from_label: null, to_stage_id: stages.initialA, to_label: 'Novo', outcome: null })
+    expect(event).toEqual({ from_stage_id: null, from_label: null, to_stage_id: stages.initialA, to_label: 'Cadastro do candidato', outcome: null })
     // Mesmo e-mail na mesma vaga: a unicidade (job_id, email) barra.
     expect(
       await reason(

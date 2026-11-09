@@ -69,6 +69,22 @@ const guard = (permission: Permission) => async () => {
   if (!can(me.role, permission)) throw redirect({ to: '/' })
 }
 
+/** Impressos (PDF): folha limpa, sem o menu, mas só com sessão. */
+const admissionDocumentsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/impressos/documentos-admissao/$id',
+  beforeLoad: async () => {
+    try {
+      const me = await queryClient.ensureQueryData(meQuery)
+      if (!can(me.role, 'recruitment.read')) throw redirect({ to: '/' })
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) throw redirect({ to: '/entrar' })
+      throw error
+    }
+  },
+  component: lazyRouteComponent(() => import('./pages/print/admission-documents'), 'AdmissionDocumentsPage'),
+})
+
 const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/',
@@ -198,6 +214,7 @@ const routeTree = rootRoute.addChildren([
   publicJobRoute,
   candidatePrivacyRoute,
   setPasswordRoute,
+  admissionDocumentsRoute,
   appRoute.addChildren([
     indexRoute,
     dashboardRoute,

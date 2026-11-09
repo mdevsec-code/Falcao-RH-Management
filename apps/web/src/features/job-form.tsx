@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Check, Eye, EyeOff, Globe, MapPin, Plus, Rocket, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Banknote, Check, Eye, EyeOff, Globe, MapPin, Plus, Rocket, Trash2 } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
@@ -9,12 +9,15 @@ import { can, CONTRACT_TYPE_LABELS, CONTRACT_TYPES, jobInput, WORK_MODE_LABELS, 
 
 import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
-import { CheckCard, Field, Input, Select, Textarea } from '../components/ui/field'
+import { Field, Input, Select, Textarea } from '../components/ui/field'
 import { api, ApiError } from '../lib/api'
 import { cn } from '../lib/cn'
 import { orgQueries } from '../lib/queries'
 import { useMe } from '../lib/session'
 import type { JobDetail, Member } from '../lib/types'
+
+/** Texto do salário em toda vaga (decisão da Falcão, 09/11/2026). */
+export const MARKET_SALARY = 'Compatível com o mercado'
 
 /** Todas as vagas da Falcão são em Camaçari/BA (decisão da Falcão, 04/11/2026). */
 export const JOB_LOCATION = { city: 'Camaçari', state: 'BA' } as const
@@ -88,7 +91,6 @@ const fromJob = (job: JobDetail): FormState => ({
   questions: job.questions.map(q => ({ id: q.id, kind: q.kind, label: q.label, options: (q.options ?? []).join('\n'), required: q.required })),
 })
 
-const money = (value: string) => (value.trim() === '' ? null : Number(value.replace(/\./g, '').replace(',', '.')))
 
 const toInput = (form: FormState) =>
   jobInput.safeParse({
@@ -98,9 +100,10 @@ const toInput = (form: FormState) =>
     workMode: form.workMode,
     city: JOB_LOCATION.city,
     state: JOB_LOCATION.state,
-    salaryMin: money(form.salaryMin),
-    salaryMax: money(form.salaryMax),
-    showSalary: form.showSalary,
+    // A Falcão não divulga faixa salarial: a vaga mostra "compatível com o mercado".
+    salaryMin: null,
+    salaryMax: null,
+    showSalary: false,
     openings: Number(form.openings),
     managerUserId: form.managerUserId || null,
     visibility: form.visibility,
@@ -265,17 +268,13 @@ export function JobFormDrawer({ open, onOpenChange, job }: { open: boolean; onOp
           </div>
         </div>
 
-        <div className="rounded-md border border-line bg-sunken/60 p-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Salário mínimo (R$)">
-              {p => <Input {...p} inputMode="decimal" value={form.salaryMin} placeholder="2.500" onChange={e => set('salaryMin', e.target.value)} />}
-            </Field>
-            <Field label="Salário máximo (R$)">
-              {p => <Input {...p} inputMode="decimal" value={form.salaryMax} placeholder="3.200" onChange={e => set('salaryMax', e.target.value)} />}
-            </Field>
-          </div>
-          <div className="mt-3">
-            <CheckCard checked={form.showSalary} onChange={checked => set('showSalary', checked)} label="Mostrar a faixa salarial na página de vagas" />
+        <div className="flex items-center gap-3 rounded-md border border-line bg-sunken/60 px-4 py-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-paper text-ok ring-1 ring-line">
+            <Banknote className="size-4" aria-hidden />
+          </span>
+          <div className="text-[13.5px]">
+            <p className="font-medium text-ink">Salário: {MARKET_SALARY.toLowerCase()}</p>
+            <p className="text-steel">A página de vagas não mostra valores.</p>
           </div>
         </div>
 

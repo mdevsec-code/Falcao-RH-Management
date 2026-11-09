@@ -12,7 +12,7 @@ import { EmptyState, ErrorState, Skeleton } from '../components/ui/layout'
 import { cn } from '../lib/cn'
 import { gsap, MOTION, useGSAP } from '../lib/gsap'
 import { CareerSections } from './career-page-view'
-import { formatSalary, postedAgo, publicApi, type CareerPageContent, type PublicJob } from './public-api'
+import { postedAgo, publicApi, type CareerPageContent, type PublicJob } from './public-api'
 import { PublicFrame } from './public-frame'
 
 const DEFAULT_HERO: CareerPageContent['hero'] = {
@@ -286,7 +286,6 @@ function JobList({ slug, jobs, loading }: { slug: string; jobs?: PublicJob[]; lo
 }
 
 function JobCard({ slug, job }: { slug: string; job: PublicJob }) {
-  const salary = formatSalary(job.salary)
   return (
     <Link
       to="/vagas/$empresa/$token"
@@ -317,13 +316,9 @@ function JobCard({ slug, job }: { slug: string; job: PublicJob }) {
       </div>
       <p className="line-clamp-2 text-[14.5px] leading-relaxed text-ink-soft">{job.description}</p>
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4 text-[13px]">
-        {salary ? (
-          <span className="inline-flex items-center gap-1.5 font-medium text-ink">
-            <Banknote className="size-4 text-ok" aria-hidden /> {salary}
-          </span>
-        ) : (
-          <span className="text-steel">Salário a combinar</span>
-        )}
+        <span className="flex items-center gap-1.5 text-ink-soft">
+          <Banknote className="size-4 text-ok" aria-hidden /> Salário compatível com o mercado
+        </span>
         <span className="text-steel-soft">{postedAgo(job.publishedAt)}</span>
       </div>
     </Link>
