@@ -2,7 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
 import { ArrowLeft, ChevronDown, Copy, ExternalLink, FileClock, GripVertical, MapPin, MoveRight, Pencil, Star, Users } from 'lucide-react'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Avatar, Badge, ErrorState, Skeleton } from '../components/ui/layout'
@@ -10,7 +10,7 @@ import { CandidateDrawer } from '../features/candidate-drawer'
 import { JobFormDrawer } from '../features/job-form'
 import { api, ApiError } from '../lib/api'
 import { cn } from '../lib/cn'
-import { canHover, Draggable, Flip, gsap, reducedMotion, useGSAP } from '../lib/gsap'
+import { canHover, Draggable, Flip, gsap, reducedMotion } from '../lib/gsap'
 import { useCan } from '../lib/session'
 import type { BoardCard, JobBoard, JobDetail } from '../lib/types'
 
@@ -56,7 +56,12 @@ export function JobBoardPage() {
     const data = queryClient.getQueryData<JobBoard>(['job-board', id])
     const card = data?.cards.find(c => c.id === cardId)
     if (!data || !card || card.stageId === stageId) return
-    if (root.current && !reducedMotion()) flipState.current = Flip.getState(root.current.querySelectorAll('[data-flip-id]'))
+    if (root.current && !reducedMotion()) {
+      const targets = root.current.querySelectorAll('[data-flip-id]')
+      // Mudança no meio de outra animação: parte de onde os cartões estão e encerra a anterior.
+      flipState.current = Flip.getState(targets)
+      Flip.killFlipsOf(targets)
+    }
     queryClient.setQueryData<JobBoard>(['job-board', id], {
       ...data,
       cards: [{ ...card, stageId }, ...data.cards.filter(c => c.id !== cardId)],
@@ -67,13 +72,17 @@ export function JobBoardPage() {
 
   useLayoutEffect(() => {
     if (!flipState.current) return
-    Flip.from(flipState.current, { duration: 0.55, ease: 'falcon', absolute: true, zIndex: 20 })
+    // Sem `absolute`: os cartões ficam no fluxo das colunas e só o transform anima.
+    Flip.from(flipState.current, { duration: 0.55, ease: 'falcon', zIndex: 20 })
     flipState.current = null
   }, [board.data])
 
   // Arrastar entre colunas (só com mouse). Recriado quando os cartões mudam.
+  // Fora do gsap.context de propósito: reverter o contexto restaurava o estilo
+  // que o cartão tinha ao criar o Draggable (às vezes no meio do Flip) e
+  // deixava cartões deslocados. Aqui o Draggable só é desligado.
   const cardIds = board.data?.cards.map(c => `${c.id}:${c.stageId}`).join() ?? ''
-  useGSAP(
+  useEffect(
     () => {
       if (!canHover() || !root.current) return
       const cards = gsap.utils.toArray<HTMLElement>('[data-card]', root.current)
@@ -109,7 +118,7 @@ export function JobBoardPage() {
       )
       return () => draggables.forEach(d => d.kill())
     },
-    { scope: root, dependencies: [cardIds], revertOnUpdate: true },
+    [cardIds],
   )
 
   const copyLink = async () => {
