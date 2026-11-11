@@ -46,7 +46,7 @@ export function CareersPage() {
               </div>
             )}
             <JobList slug={empresa} jobs={data?.jobs} loading={query.isPending} />
-            {data?.page && <CareerSections content={data.page} stats={{ jobs: data.jobs.length, cities }} />}
+            {data?.page && <CareerSections content={data.page} stats={{ jobs: data.jobs.length, cities }} imageUrl={id => publicApi.assetUrl(empresa, id)} />}
           </>
         )}
       </RevealScope>

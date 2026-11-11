@@ -48,8 +48,26 @@ function Section({ id, eyebrow, title, children }: { id?: string; eyebrow?: stri
  * Seções institucionais da página de vagas (abaixo da capa). Usado na página
  * pública e na pré-visualização do editor. Seções desligadas não aparecem.
  */
-export function CareerSections({ content, stats }: { content: CareerPageContent; stats: { jobs: number; cities: number } }) {
+/** Fotos do "Sobre" sempre ocupam a largura toda, qualquer que seja a quantidade. */
+const PHOTO_GRID: Record<number, string> = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-1 sm:grid-cols-2',
+  3: 'grid-cols-1 sm:grid-cols-3',
+  4: 'grid-cols-2 lg:grid-cols-4',
+}
+
+export function CareerSections({
+  content,
+  stats,
+  imageUrl,
+}: {
+  content: CareerPageContent
+  stats: { jobs: number; cities: number }
+  /** Endereço de uma imagem da página pelo id (pública ou, no editor, temporária). */
+  imageUrl: (id: string) => string | null
+}) {
   const { about, benefits, faq, links } = content
+  const photos = about.imageIds.map(id => ({ id, src: imageUrl(id) }))
   const contacts = [
     links.instagram && { href: links.instagram, label: 'Instagram', icon: Camera },
     links.linkedin && { href: links.linkedin, label: 'LinkedIn', icon: BriefcaseBusiness },
@@ -61,7 +79,7 @@ export function CareerSections({ content, stats }: { content: CareerPageContent;
 
   return (
     <>
-      {about.enabled && about.body.trim() && (
+      {about.enabled && (about.body.trim() || photos.length > 0) && (
         <Section eyebrow="Quem somos" title={about.title}>
           <div className="grid gap-10 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <div className="flex max-w-2xl flex-col gap-4 text-[16.5px] leading-relaxed text-ink-soft">
@@ -82,6 +100,15 @@ export function CareerSections({ content, stats }: { content: CareerPageContent;
               </div>
             </div>
           </div>
+          {photos.length > 0 && (
+            <ul className={`mt-10 grid gap-4 ${PHOTO_GRID[photos.length] ?? PHOTO_GRID[4]}`}>
+              {photos.map(({ id, src }) => (
+                <li key={id} className={`overflow-hidden rounded-xl border border-line bg-sunken shadow-xs ${photos.length === 1 ? 'aspect-[21/9]' : photos.length === 2 ? 'aspect-[16/9]' : 'aspect-[4/3]'}`}>
+                  {src && <img src={src} alt="" loading="lazy" className="size-full object-cover transition-transform duration-700 hover:scale-[1.03]" />}
+                </li>
+              ))}
+            </ul>
+          )}
         </Section>
       )}
 

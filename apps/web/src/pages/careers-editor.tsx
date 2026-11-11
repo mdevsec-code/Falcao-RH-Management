@@ -27,6 +27,7 @@ import { BENEFIT_EMOJIS, careerPageContent, suggestBenefitEmoji, type CareerPage
 
 import { Button } from '../components/ui/button'
 import { Field, Input, Textarea } from '../components/ui/field'
+import { CareerImagePicker, useCareerAssetUrls } from '../features/career-images'
 import { ErrorState, PageHeader, Panel, Skeleton } from '../components/ui/layout'
 import { api, ApiError } from '../lib/api'
 import { cn } from '../lib/cn'
@@ -183,6 +184,12 @@ function Editor({ initial }: { initial: EditorState }) {
               {p => <Textarea {...p} value={content.hero.subtitle} maxLength={200} onChange={e => update('hero', { subtitle: e.target.value })} className="min-h-20" />}
             </Field>
             <Counter value={content.hero.subtitle} max={200} />
+            <CareerImagePicker
+              label="Foto da capa (opcional)"
+              ids={content.hero.imageId ? [content.hero.imageId] : []}
+              max={1}
+              onChange={ids => update('hero', { imageId: ids[0] ?? null })}
+            />
           </SectionPanel>
 
           <SectionPanel icon={Type} title="Sobre a Falcão" enabled={content.about.enabled} onToggle={enabled => update('about', { enabled })}>
@@ -193,6 +200,7 @@ function Editor({ initial }: { initial: EditorState }) {
               {p => <Textarea {...p} value={content.about.body} maxLength={3000} onChange={e => update('about', { body: e.target.value })} className="min-h-40" />}
             </Field>
             <Counter value={content.about.body} max={3000} />
+            <CareerImagePicker label="Fotos (até 4)" ids={content.about.imageIds} max={4} onChange={imageIds => update('about', { imageIds })} />
           </SectionPanel>
 
           <SectionPanel icon={ImageIcon} title="Por que trabalhar aqui" enabled={content.benefits.enabled} onToggle={enabled => update('benefits', { enabled })}>
@@ -516,6 +524,7 @@ function FaqEditor({ items, onChange }: { items: CareerPageContent['faq']['items
 function Preview({ content, slug, device, onDevice }: { content: CareerPageContent; slug: string; device: 'desktop' | 'mobile'; onDevice: (d: 'desktop' | 'mobile') => void }) {
   const width = device === 'desktop' ? 1200 : 390
   const zoom = device === 'desktop' ? 0.5 : 0.85
+  const imageUrl = useCareerAssetUrls([...(content.hero.imageId ? [content.hero.imageId] : []), ...content.about.imageIds])
   return (
     <div className="surface overflow-hidden">
       <div className="flex items-center gap-3 border-b border-line bg-sunken/70 px-4 py-2.5">
@@ -549,11 +558,11 @@ function Preview({ content, slug, device, onDevice }: { content: CareerPageConte
       <div className="max-h-[calc(100dvh-200px)] overflow-auto bg-concrete">
         <div className="mx-auto origin-top" style={{ width, zoom }}>
           <div data-no-reveal className="pointer-events-none select-none" aria-hidden>
-            {content.hero.enabled && <Hero title={content.hero.title || 'Título da capa'} subtitle={content.hero.subtitle} jobs={6} cities={3} imageUrl={null} />}
+            {content.hero.enabled && <Hero title={content.hero.title || 'Título da capa'} subtitle={content.hero.subtitle} jobs={6} cities={3} imageUrl={content.hero.imageId ? imageUrl(content.hero.imageId) : null} />}
             <div className="mx-auto max-w-6xl px-6 py-10">
               <div className="rounded-lg border-2 border-dashed border-line-strong p-8 text-center text-[15px] text-steel">Aqui aparecem as vagas abertas, automaticamente.</div>
             </div>
-            <CareerSections content={content} stats={{ jobs: 6, cities: 3 }} />
+            <CareerSections content={content} stats={{ jobs: 6, cities: 3 }} imageUrl={imageUrl} />
           </div>
         </div>
       </div>

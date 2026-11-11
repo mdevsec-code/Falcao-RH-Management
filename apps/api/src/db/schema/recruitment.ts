@@ -280,3 +280,41 @@ export const candidateFiles = pgTable(
     index('candidate_files_scan_idx').on(t.scanStatus, t.createdAt),
   ],
 )
+
+// ---------- página oficial de vagas (spec 5.9) ----------
+
+/**
+ * Conteúdo da página pública de vagas, uma por organização. O RH edita o
+ * rascunho; publicar copia o rascunho para `published`, que é o único lido
+ * pela rota pública. Privilégios e a função `public_career_asset` na
+ * migração `0011_career_page_security.sql`.
+ */
+export const careerPages = pgTable('career_pages', {
+  id: id(),
+  tenantId: tenantId().unique(),
+  draft: jsonb('draft').notNull(),
+  published: jsonb('published'),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+})
+
+/**
+ * Imagens enviadas para a página (capa e fotos do "Sobre"). A rota pública só
+ * serve as que aparecem na versão publicada.
+ */
+export const careerAssets = pgTable(
+  'career_assets',
+  {
+    id: id(),
+    tenantId: tenantId(),
+    storageKey: text('storage_key').notNull(),
+    filename: text('filename').notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  t => [index('career_assets_tenant_idx').on(t.tenantId, t.createdAt)],
+)

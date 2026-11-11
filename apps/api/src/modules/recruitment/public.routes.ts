@@ -5,7 +5,7 @@ import type { AppDeps } from '../../app'
 import { AppError } from '../../lib/errors'
 import { verifyTurnstile } from '../../lib/turnstile'
 import { readUpload } from '../../lib/upload'
-import { eraseByToken, getPublicJob, listPublicJobs, renewByToken, submitApplication } from './public.service'
+import { eraseByToken, getPublicCareerAsset, getPublicJob, listPublicJobs, renewByToken, submitApplication } from './public.service'
 
 const slugParams = z.object({ slug: z.string().min(1).max(80) })
 const jobParams = slugParams.extend({ token: z.string().min(16).max(200) })
@@ -22,6 +22,17 @@ export const publicRecruitmentRoutes =
     const writes = { rateLimit: { max: test ? 10_000 : 10, timeWindow: '1 minute' } }
 
     app.get('/:slug/jobs', { config: reads, schema: { params: slugParams } }, async request => listPublicJobs(db, request.params.slug))
+
+    // Imagens da página (capa e "Sobre"), só as publicadas.
+    const assetParams = slugParams.extend({ id: z.string().max(64) })
+    app.get('/:slug/assets/:id', { config: reads, schema: { params: assetParams } }, async (request, reply) => {
+      const { body, mimeType } = await getPublicCareerAsset(db, storage, request.params.slug, request.params.id)
+      return reply
+        .header('content-type', mimeType)
+        .header('cache-control', 'public, max-age=300')
+        .header('x-content-type-options', 'nosniff')
+        .send(body)
+    })
 
     app.get('/:slug/jobs/:token', { config: reads, schema: { params: jobParams } }, async request =>
       getPublicJob(db, request.params.slug, request.params.token),

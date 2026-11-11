@@ -129,6 +129,13 @@ describe('isolamento das tabelas do recrutamento', () => {
     candidate_files: () => sql`
       insert into candidate_files (tenant_id, candidate_id, application_id, storage_key, filename, size_bytes)
       values (${b.tenant.id}, ${B.candidate}, ${B.application}, ${randomUUID()}, 'cv.pdf', 10)`,
+    // Uma página por organização: a da B é criada uma vez, no beforeAll.
+    career_pages: () => sql`
+      insert into career_pages (tenant_id, draft)
+      values (${b.tenant.id}, '{}'::jsonb)`,
+    career_assets: () => sql`
+      insert into career_assets (tenant_id, storage_key, filename, mime_type, size_bytes)
+      values (${b.tenant.id}, ${randomUUID()}, 'capa.png', 'image/png', 10)`,
   }
   const tables = Object.keys(rowOfB)
 
@@ -155,7 +162,7 @@ describe('isolamento das tabelas do recrutamento', () => {
     await t.db.execute(sql`
       insert into applications (id, tenant_id, job_id, candidate_id, email, privacy_token, stage_id)
       values (${B.application}, ${b.tenant.id}, ${B.job}, ${B.candidate}, 'b@exemplo.com', ${randomUUID()}, ${B.stage})`)
-    for (const table of ['application_answers', 'application_events', 'application_notes', 'candidate_files']) {
+    for (const table of ['application_answers', 'application_events', 'application_notes', 'candidate_files', 'career_pages', 'career_assets']) {
       await t.db.execute(rowOfB[table]!())
     }
   })

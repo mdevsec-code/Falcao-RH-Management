@@ -7,7 +7,7 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { and, asc, desc, eq, sql } from 'drizzle-orm'
 
-import { applicationForm, RECRUITMENT_DEFAULTS, type ApplicationForm, type TenantSettings } from '@falcao-rh/contracts'
+import { applicationForm, RECRUITMENT_DEFAULTS, type ApplicationForm, type CareerPageContent, type TenantSettings } from '@falcao-rh/contracts'
 
 import { SYSTEM_USER } from '../../automations/automations'
 import { withPublic, withTenant, type Database, type PublicTenant, type Tx } from '../../db/client'
@@ -19,6 +19,7 @@ import {
   applications,
   candidateFiles,
   candidates,
+  careerPages,
   departments,
   jobOpenings,
   jobQuestions,
@@ -81,8 +82,27 @@ export const listPublicJobs = (db: Database, slug: string) =>
       .leftJoin(departments, eq(departments.id, jobOpenings.departmentId))
       .where(and(eq(jobOpenings.visibility, 'public'), eq(jobOpenings.status, 'published')))
       .orderBy(desc(jobOpenings.publishedAt))
-    return { company: { name: tenant.name }, jobs: rows.map(toPublicJob) }
+    // Só a versão publicada (a role pública não lê o rascunho).
+    const [page] = await tx.select({ published: careerPages.published }).from(careerPages)
+    return { company: { name: tenant.name }, page: (page?.published as CareerPageContent | undefined) ?? null, jobs: rows.map(toPublicJob) }
   })
+
+/**
+ * Imagem da página de vagas: só se estiver na versão publicada da organização.
+ * Id inválido, de outra organização ou ainda não publicado: 404.
+ */
+export const getPublicCareerAsset = async (db: Database, storage: Storage, slug: string, id: string) => {
+  if (!UUID.test(id)) throw imageNotFound()
+  const asset = await withPublic(db, slug, async (tx, tenant) => {
+    const result = await tx.execute(sql`select storage_key, mime_type from public_career_asset(${tenant.id}, ${id})`)
+    return rowsOf<{ storage_key: string; mime_type: string }>(result)[0] ?? null
+  })
+  if (!asset) throw imageNotFound()
+  return { body: await storage.read(asset.storage_key), mimeType: asset.mime_type }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const imageNotFound = () => new AppError(404, 'not_found', 'Imagem não encontrada.')
 
 export const getPublicJob = (db: Database, slug: string, token: string) =>
   publicTx(db, slug, async tx => {
