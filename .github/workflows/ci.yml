@@ -19,7 +19,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
+      # Sem scripts de instalação dos pacotes (cadeia de suprimentos). O esbuild
+      # funciona sem o dele: o binário vem do pacote opcional da plataforma.
+      - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
@@ -57,16 +59,21 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # Sem scripts de instalação dos pacotes (cadeia de suprimentos). O esbuild
+      # funciona sem o dele: o binário vem do pacote opcional da plataforma.
+      - run: npm ci --ignore-scripts
+      # Binários locais (versão travada no package-lock), nunca `npx` baixando sob demanda.
+      - run: ./node_modules/.bin/playwright install --with-deps chromium
       - name: Migrações e dados de demonstração (fictícios)
         run: npm run db:migrate && npm run db:seed
       - name: Subir API e interface
         run: |
           npm run dev:api > api.log 2>&1 &
           npm run dev:web > web.log 2>&1 &
-          npx --yes wait-on@8 -t 90000 http://127.0.0.1:3333/health http://localhost:5173
-      - run: npx playwright test
+          for url in http://127.0.0.1:3333/health http://localhost:5173; do
+            timeout 90 bash -c "until curl -sf -o /dev/null $url; do sleep 2; done" || { echo "$url não respondeu"; exit 1; }
+          done
+      - run: ./node_modules/.bin/playwright test
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

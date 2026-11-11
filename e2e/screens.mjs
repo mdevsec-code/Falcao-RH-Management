@@ -13,7 +13,9 @@ await mkdir(OUT, { recursive: true })
 const browser = await chromium.launch()
 const errors = []
 
-const session = async (email, viewport = { width: 1440, height: 900 }) => {
+const DESKTOP = { width: 1440, height: 900 }
+
+const session = async (email, viewport = DESKTOP) => {
   const page = await browser.newPage({ viewport, locale: 'pt-BR' })
   page.on('pageerror', error => errors.push(`${email}: ${error.message}`))
   page.on('console', message => message.type() === 'error' && errors.push(`${email}: ${message.text()}`))

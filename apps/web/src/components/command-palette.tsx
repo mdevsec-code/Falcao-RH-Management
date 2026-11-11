@@ -28,6 +28,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const [debounced, setDebounced] = useState('')
   const [active, setActive] = useState(0)
   const list = useRef<HTMLUListElement>(null)
+  const search = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const handle = setTimeout(() => setDebounced(query.trim()), 180)
@@ -98,6 +99,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         <Dialog.Content
           className="dialog fixed inset-x-0 top-[12vh] z-50 mx-auto w-[min(660px,calc(100vw-24px))] overflow-hidden rounded-xl border border-line bg-paper shadow-pop focus:outline-none"
           onKeyDown={onKeyDown}
+          // O diálogo leva o foco para a busca ao abrir (no lugar de autoFocus).
+          onOpenAutoFocus={event => {
+            event.preventDefault()
+            search.current?.focus()
+          }}
         >
           <Dialog.Title className="sr-only">Ir para ou buscar</Dialog.Title>
           <Dialog.Description className="sr-only">Digite para filtrar telas ou buscar colaboradores. Use as setas e Enter.</Dialog.Description>
@@ -106,7 +112,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               <Search className="size-4" aria-hidden />
             </span>
             <input
-              autoFocus
+              ref={search}
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder={canSearchPeople ? 'Ir para uma tela ou buscar uma pessoa' : 'Ir para uma tela'}

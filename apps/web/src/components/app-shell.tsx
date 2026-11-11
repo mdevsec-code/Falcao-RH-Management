@@ -471,7 +471,8 @@ function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null
   return (
     <div ref={ref} className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
-      <div data-menu-overlay className="absolute inset-0 bg-night/55 backdrop-blur-[2px]" onClick={onClose} />
+      {/* Fundo clicável fecha o menu; fora da ordem de Tab (o botão "Fechar menu" já atende o teclado). */}
+      <button type="button" tabIndex={-1} aria-label="Fechar menu" data-menu-overlay className="absolute inset-0 cursor-default bg-night/55 backdrop-blur-[2px]" onClick={onClose} />
       <div data-menu-panel className="relative h-full w-[min(300px,85vw)] shadow-pop">
         <Sidebar onNavigate={onClose} />
         <button type="button" onClick={onClose} className="absolute top-8 right-3 rounded-full p-1.5 text-fog hover:bg-white/10 hover:text-snow" aria-label="Fechar menu">

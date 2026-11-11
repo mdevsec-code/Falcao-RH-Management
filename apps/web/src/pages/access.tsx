@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Crown, MailPlus, UserRound, Users, UsersRound } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
+import { z } from 'zod'
 
 import { ROLE_LABELS, ROLES, type Role } from '@falcao-rh/contracts'
 
@@ -163,6 +164,8 @@ export function AccessPage() {
   )
 }
 
+const emailSchema = z.email()
+
 function InviteDrawer({
   open,
   onOpenChange,
@@ -188,7 +191,8 @@ function InviteDrawer({
     e.preventDefault()
     invite.mutate()
   }
-  const valid = form.name.trim().length >= 3 && /\S+@\S+\.\S+/.test(form.email)
+  // Mesma validação de e-mail da API (sem regex com retrocesso exponencial).
+  const valid = form.name.trim().length >= 3 && emailSchema.safeParse(form.email.trim()).success
 
   return (
     <Drawer
