@@ -11,105 +11,72 @@ import { Field, Input } from '../components/ui/field'
 import { authClient } from '../lib/auth-client'
 import { cn } from '../lib/cn'
 import { toggleTheme, useTheme } from '../lib/theme'
-import { canHover, gsap, reducedMotion, splitTitle, TITLE_HIDDEN_Y, useGSAP } from '../lib/gsap'
+import { gsap, reducedMotion, useGSAP } from '../lib/gsap'
 
 type Step = 'password' | 'totp' | 'forgot' | 'forgot-sent'
-
-const CAPABILITIES = ['Férias calculadas pelas regras da CLT', 'Documentos com validade e versões', 'Aprovações do canteiro ao RH']
 
 /** Sinaliza para o sistema tocar a abertura depois do login. */
 export const INTRO_FLAG = 'falcao-rh:intro'
 
 const ease = [0.16, 1, 0.3, 1] as const
 
+/** O que o portal cobre, escrito como as frentes de serviço de uma placa de obra. */
+const FRENTES = 'Recrutamento e seleção, admissão digital, benefícios VA/VR, mobilidade, férias e documentos'
+
+function SignRow({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('border-t-2 border-night px-6 py-3.5', className)}>
+      <dt className="text-[12px] font-semibold text-night/70">{label}</dt>
+      <dd className="mt-0.5 text-[17px] leading-snug font-semibold text-night">{children}</dd>
+    </div>
+  )
+}
+
 /**
- * Painel da marca: uma linha do tempo única (máscara do falcão, título
- * montado por caractere, capacidades, linha de prumo) e um holofote que
- * acompanha o mouse sobre a grade técnica.
+ * A placa de obra, que todo canteiro tem na entrada: identifica a obra, as
+ * frentes de serviço e o responsável. Aqui ela apresenta o portal. Um único
+ * movimento: a placa é içada e assenta nos postes.
  */
-function BrandPanel() {
-  const root = useRef<HTMLElement>(null)
-
+function SitePlaque() {
+  const root = useRef<HTMLDivElement>(null)
   useGSAP(
-    (_ctx, contextSafe) => {
+    () => {
       if (reducedMotion()) return
-      const split = splitTitle('[data-headline]')
-      const tl = gsap.timeline({ defaults: { ease: 'falcon' } })
-      tl.from('[data-falcon]', { clipPath: 'inset(100% 0% 0% 0%)', duration: 1.6, ease: 'expo.inOut' })
-        .from('[data-falcon] img', { scale: 1.18, yPercent: 6, duration: 2.2 }, '<')
-        .from('[data-brand]', { y: -16, autoAlpha: 0, duration: 0.8 }, 0.3)
-        .from(split.chars, { yPercent: TITLE_HIDDEN_Y, duration: 1, stagger: 0.016 }, 0.55)
-        .from('[data-capability]', { y: 18, autoAlpha: 0, stagger: 0.08, duration: 0.8 }, '-=0.55')
-        .from('[data-rule]', { scaleX: 0, transformOrigin: 'left', duration: 1.2, ease: 'expo.out' }, '-=0.6')
-
-      // Holofote e profundidade: só com mouse.
-      if (!canHover()) return () => split.revert()
-      const el = root.current!
-      const spotX = gsap.quickTo(el, '--spot-x', { duration: 0.6, ease: 'power3.out' })
-      const spotY = gsap.quickTo(el, '--spot-y', { duration: 0.6, ease: 'power3.out' })
-      const art = gsap.quickTo('[data-falcon]', 'x', { duration: 1.2, ease: 'power3.out' })
-      const artY = gsap.quickTo('[data-falcon]', 'y', { duration: 1.2, ease: 'power3.out' })
-      const move = contextSafe!((event: PointerEvent) => {
-        const box = el.getBoundingClientRect()
-        const px = event.clientX - box.left
-        const py = event.clientY - box.top
-        spotX(px)
-        spotY(py)
-        art((px / box.width - 0.5) * -26)
-        artY((py / box.height - 0.5) * -18)
-      })
-      el.addEventListener('pointermove', move)
-      return () => {
-        el.removeEventListener('pointermove', move)
-        split.revert()
-      }
+      gsap
+        .timeline({ defaults: { ease: 'expo.out' } })
+        .from('[data-post]', { scaleY: 0, transformOrigin: 'bottom', duration: 0.9, stagger: 0.08 })
+        .from('[data-plaque]', { yPercent: -18, rotate: -2.5, autoAlpha: 0, duration: 1.1, ease: 'back.out(1.6)' }, '-=0.45')
     },
     { scope: root },
   )
-
   return (
-    <aside
-      ref={root}
-      style={{ ['--spot-x' as string]: '70%', ['--spot-y' as string]: '40%' }}
-      className="grain relative hidden overflow-hidden bg-night lg:flex lg:flex-col lg:justify-between lg:p-14"
-    >
-      {/* Grade técnica revelada pelo holofote. */}
-      <div className="blueprint pointer-events-none absolute inset-0 opacity-40" aria-hidden />
-      <div
-        className="blueprint-bright pointer-events-none absolute inset-0"
-        style={{ maskImage: 'radial-gradient(260px circle at var(--spot-x) var(--spot-y), black, transparent 70%)' }}
-        aria-hidden
-      />
-
-      <div data-falcon className="pointer-events-none absolute -right-[22%] -bottom-[4%] h-[104%] will-change-transform">
-        <img src={falcon} alt="" className="h-full w-auto max-w-none select-none" draggable={false} />
+    <div ref={root} className="relative flex w-full max-w-[34rem] flex-1 flex-col">
+      <dl data-plaque className="relative z-10 border-[3px] border-night bg-brand shadow-[0_24px_48px_-24px_rgb(0_0_0/0.45)]">
+        <div className="flex items-center gap-4 px-6 py-5">
+          <span className="flex size-16 shrink-0 items-center justify-center bg-night">
+            <img src={falcon} alt="" className="h-12 w-auto" draggable={false} />
+          </span>
+          <span>
+            <span className="block font-display text-[clamp(40px,3.6vw,56px)] leading-[0.9] font-semibold text-night">Falcão RH</span>
+            <span className="mt-1 block text-[14px] font-medium text-night/80">Falcão Construções e Engenharia</span>
+          </span>
+        </div>
+        <SignRow label="Obra">Portal do RH</SignRow>
+        <SignRow label="Frentes de serviço">{FRENTES}</SignRow>
+        <div className="grid grid-cols-2">
+          <SignRow label="Responsável">Recursos Humanos</SignRow>
+          <SignRow label="Acesso" className="border-l-2">
+            Só com convite
+          </SignRow>
+        </div>
+      </dl>
+      {/* Postes de sustentação até o chão. */}
+      <div className="flex flex-1 justify-between px-[16%]" aria-hidden>
+        <span data-post className="w-3 bg-[linear-gradient(90deg,#6b6e73,#b9bcc0_45%,#6b6e73)]" />
+        <span data-post className="w-3 bg-[linear-gradient(90deg,#6b6e73,#b9bcc0_45%,#6b6e73)]" />
       </div>
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-[58%] bg-gradient-to-r from-night from-60% to-transparent" aria-hidden />
-
-      <div data-brand className="relative">
-        <p className="font-display text-[28px] leading-none font-semibold text-snow">
-          Falcão <span className="text-brand">RH</span>
-        </p>
-        <p className="mt-2 text-[11px] font-medium tracking-[0.18em] text-fog/80 uppercase">Falcão Construções e Engenharia</p>
-      </div>
-
-      <div className="relative max-w-[30rem]">
-        <h2 data-headline className="font-display text-[clamp(52px,5.4vw,84px)] leading-[0.92] font-semibold tracking-[-0.015em] text-snow">
-          Gente, obra e escritório no mesmo cadastro.
-        </h2>
-        <ul className="mt-10 grid gap-3">
-          {CAPABILITIES.map(text => (
-            <li data-capability key={text} className="flex items-center gap-4 text-[15px] text-snow/85">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-brand/40 bg-brand/10" aria-hidden>
-                <span className="size-1.5 rounded-full bg-brand" />
-              </span>
-              {text}
-            </li>
-          ))}
-        </ul>
-        <div data-rule className="mt-10 h-px w-full bg-gradient-to-r from-brand/70 via-snow/25 to-transparent" aria-hidden />
-      </div>
-    </aside>
+      <span className="block h-[3px] w-full bg-night/80 dark:bg-snow/30" aria-hidden />
+    </div>
   )
 }
 
@@ -119,7 +86,7 @@ function AuthThemeToggle() {
     <button
       type="button"
       onClick={event => toggleTheme({ x: event.clientX, y: event.clientY })}
-      className="absolute top-5 right-5 z-10 flex size-10 items-center justify-center rounded-full border border-line bg-paper/80 text-ink-soft shadow-xs backdrop-blur transition-colors hover:text-ink"
+      className="absolute top-5 right-5 z-10 flex size-10 items-center justify-center rounded-full border border-line bg-paper text-ink-soft transition-colors hover:text-ink"
       aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
     >
       {theme === 'dark' ? <Sun className="size-[18px]" aria-hidden /> : <Moon className="size-[18px]" aria-hidden />}
@@ -149,33 +116,26 @@ function IconInput({ icon: Icon, type, ...props }: InputHTMLAttributes<HTMLInput
   )
 }
 
+/** Moldura das telas de acesso: a placa à esquerda (no celular, uma faixa no topo), o formulário à direita. */
 export function AuthFrame({ children }: { children: ReactNode }) {
-  const panel = useRef<HTMLDivElement>(null)
-  useGSAP(
-    () => {
-      if (reducedMotion()) return
-      gsap.from(panel.current!, { y: 24, autoAlpha: 0, duration: 1, delay: 0.35 })
-    },
-    { scope: panel },
-  )
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-      <BrandPanel />
-      <main className="relative flex flex-col items-center justify-center overflow-hidden bg-concrete px-5 py-12">
-        <div className="canvas-grid pointer-events-none absolute inset-0" aria-hidden />
+    <div className="grid min-h-dvh bg-paper lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)]">
+      <aside className="relative hidden flex-col items-center overflow-hidden bg-concrete px-14 pt-[16vh] lg:flex">
+        <SitePlaque />
+      </aside>
+      <main className="relative flex flex-col justify-center px-6 py-10 sm:px-12 lg:px-16">
         <AuthThemeToggle />
-        <div ref={panel} className="relative w-full max-w-[400px]">
-          <div className="mb-10 flex items-center gap-3 lg:hidden">
-            <img src={falcon} alt="" className="h-12 w-auto" />
-            <span className="font-display text-[30px] leading-none font-semibold text-ink">
-              Falcão <span className="rounded-[5px] bg-brand px-1.5 text-night">RH</span>
-            </span>
-          </div>
-          <div className="rounded-xl border border-line bg-paper/85 p-7 shadow-lift backdrop-blur-xl sm:p-9">{children}</div>
-          <p className="mt-6 flex items-center justify-center gap-2 text-[12px] text-steel">
-            <ShieldCheck className="size-3.5 text-ok" aria-hidden /> Conexão segura · Dados protegidos pela LGPD
-          </p>
+        {/* No celular, a placa vira uma faixa: mesma identidade, sem ocupar a tela. */}
+        <div className="mb-10 flex items-center gap-3 self-start border-[3px] border-night bg-brand py-2 pr-4 pl-2 lg:hidden">
+          <span className="flex size-10 items-center justify-center bg-night">
+            <img src={falcon} alt="" className="h-7 w-auto" />
+          </span>
+          <span className="font-display text-[26px] leading-none font-semibold text-night">Falcão RH</span>
         </div>
+        <div className="w-full max-w-[400px]">{children}</div>
+        <p className="mt-10 flex items-start gap-2 text-[13px] text-steel">
+          <ShieldCheck className="mt-px size-4 shrink-0 text-ok" aria-hidden /> Conexão segura. Seus dados são protegidos pela LGPD.
+        </p>
       </main>
     </div>
   )
@@ -199,7 +159,6 @@ function StepPanel({ id, children }: { id: string; children: ReactNode }) {
 function StepTitle({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="mb-6">
-      <span className="mb-4 block h-[3px] w-10 rounded-full bg-brand" aria-hidden />
       <h1 className="font-display text-[44px] leading-[0.95] font-semibold tracking-[-0.01em] text-ink">{title}</h1>
       {children && <p className="mt-2.5 text-[14.5px] text-steel">{children}</p>}
     </div>
@@ -270,6 +229,7 @@ export function LoginPage() {
 
   const signIn = (event: FormEvent) => {
     event.preventDefault()
+    if (!email.trim() || !password) return fail('Informe o e-mail e a senha.')
     void run(async () => {
       const { data, error } = await authClient.signIn.email({ email, password })
       if (error)
@@ -303,7 +263,7 @@ export function LoginPage() {
         {step === 'password' && (
           <StepPanel id="password">
             <form onSubmit={signIn} className="flex flex-col gap-4" noValidate>
-              <StepTitle title="Entrar">Use o e-mail do convite que você recebeu.</StepTitle>
+              <StepTitle title="Entrar">Use o e-mail e a senha do convite que você recebeu do RH.</StepTitle>
               <Field label="E-mail">
                 {props => <IconInput {...props} icon={Mail} type="email" autoComplete="username" placeholder="voce@empresa.com.br" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />}
               </Field>
@@ -312,7 +272,7 @@ export function LoginPage() {
               </Field>
               <FormError error={error} attempt={attempt} />
               <Magnetic strength={0.12} className="flex w-full">
-                <Button type="submit" variant="primary" loading={busy} disabled={!email || !password} size="lg" className="mt-1 w-full">
+                <Button type="submit" variant="primary" loading={busy} size="lg" className="mt-1 w-full">
                   Entrar
                 </Button>
               </Magnetic>
