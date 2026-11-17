@@ -9,7 +9,7 @@ import { createTestApp, nextCpf, type TestApp } from './harness'
 let t: TestApp
 let org: Awaited<ReturnType<TestApp['seedTenant']>>
 let other: Awaited<ReturnType<TestApp['seedTenant']>>
-const ids: Record<string, string> = {}
+const ids = {} as Record<'vr' | 'va' | 'a' | 'b' | 'c' | 'run', string>
 
 const call = (role: 'hr' | 'manager', method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, payload?: object, who = org) =>
   t.app.inject({ method, url: `/api/v1${url}`, headers: { cookie: who.users[role]!.cookie }, ...(payload ? { payload } : {}) })
