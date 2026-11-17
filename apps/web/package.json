@@ -13,6 +13,7 @@
   "dependencies": {
     "@falcao-rh/contracts": "*",
     "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/newsreader": "^5.3.0",
     "@fontsource/barlow-condensed": "^5.3.0",
     "@gsap/react": "^2.1.2",
     "@hookform/resolvers": "^6.0.2",
