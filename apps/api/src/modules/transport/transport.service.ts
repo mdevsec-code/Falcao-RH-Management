@@ -11,7 +11,7 @@ import {
 } from '@falcao-rh/contracts'
 
 import type { Tx } from '../../db/client'
-import { departments, employees, employeeTransport, transportRoutes } from '../../db/schema'
+import { departments, employees, employeeTransport, positions, transportRoutes } from '../../db/schema'
 import type { Ctx } from '../../http/context'
 import { audit } from '../../lib/audit'
 import { badRequest, notFound } from '../../lib/errors'
@@ -59,6 +59,7 @@ export const transportBoard = (tx: Tx) =>
       fullName: employees.fullName,
       status: employees.status,
       departmentName: departments.name,
+      positionTitle: positions.title,
       homeCity: sql<string | null>`${employees.address}->>'city'`,
       homeDistrict: sql<string | null>`${employees.address}->>'district'`,
       mode: employeeTransport.mode,
@@ -74,6 +75,7 @@ export const transportBoard = (tx: Tx) =>
     })
     .from(employees)
     .leftJoin(departments, eq(departments.id, employees.departmentId))
+    .leftJoin(positions, eq(positions.id, employees.positionId))
     .leftJoin(employeeTransport, eq(employeeTransport.employeeId, employees.id))
     .leftJoin(transportRoutes, eq(transportRoutes.id, employeeTransport.routeId))
     .where(ne(employees.status, 'terminated'))

@@ -176,7 +176,7 @@ const admissionRoute = createRoute({
 const mobilityRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/mobilidade',
-  validateSearch: z.object({ tab: z.enum(['visao', 'colaboradores', 'fretado', 'qualidade', 'atualizar']).optional() }),
+  validateSearch: z.object({ tab: z.enum(['visao', 'colaboradores', 'mobilidade', 'fretado', 'cidades', 'indicadores', 'qualidade', 'atualizar']).optional() }),
   beforeLoad: guard('transport.read'),
   component: lazyRouteComponent(() => import('./pages/mobility'), 'MobilityPage'),
 })

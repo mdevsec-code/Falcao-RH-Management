@@ -1,8 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { AlertTriangle, Bus, CheckCircle2, Download, FileSpreadsheet, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react'
+import {
+  AlertTriangle,
+  Building2,
+  Bus,
+  CheckCircle2,
+  Copy,
+  Download,
+  FileSpreadsheet,
+  Gauge,
+  MapPin,
+  PauseCircle,
+  Pencil,
+  Plus,
+  Search,
+  Smartphone,
+  Trash2,
+  Upload,
+  Users,
+  Wallet,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { toast } from 'sonner'
 
 import { TRANSPORT_MODE_LABELS, TRANSPORT_MODES, type TransportMode } from '@falcao-rh/contracts'
@@ -26,6 +47,7 @@ type BoardRow = {
   fullName: string
   status: EmployeeStatus
   departmentName: string | null
+  positionTitle: string | null
   homeCity: string | null
   homeDistrict: string | null
   mode: TransportMode | null
@@ -38,7 +60,7 @@ type BoardRow = {
   monthlyCostCents: number | null
   notes: string | null
 }
-type Row = BoardRow & { id: string }
+type Row = BoardRow & { id: string; city: string | null; duplicate: boolean }
 
 type Route = {
   id: string
@@ -50,11 +72,14 @@ type Route = {
   riders: number
 }
 
-type Tab = 'visao' | 'colaboradores' | 'fretado' | 'qualidade' | 'atualizar'
+type Tab = 'visao' | 'colaboradores' | 'mobilidade' | 'fretado' | 'cidades' | 'indicadores' | 'qualidade' | 'atualizar'
 const TABS: { key: Tab; label: string }[] = [
   { key: 'visao', label: 'Visão geral' },
   { key: 'colaboradores', label: 'Colaboradores' },
+  { key: 'mobilidade', label: 'Mobilidade' },
   { key: 'fretado', label: 'Fretado' },
+  { key: 'cidades', label: 'Cidades' },
+  { key: 'indicadores', label: 'Indicadores' },
   { key: 'qualidade', label: 'Qualidade dos dados' },
   { key: 'atualizar', label: 'Atualizar dados' },
 ]
@@ -66,16 +91,28 @@ const MODE_COLORS: Record<TransportMode | 'unset', string> = {
   none: 'var(--color-steel-soft)',
   unset: 'var(--color-danger)',
 }
-const UNSET = 'Não cadastrado'
+const UNSET = 'Sem cadastro'
 
 const money = (cents: number) => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-const cityOf = (r: BoardRow) => r.pickupCity ?? r.homeCity
+const pct = (part: number, total: number) => (total ? `${Math.round((part / total) * 100)}%` : '0%')
 const modeLabel = (mode: TransportMode | null) => (mode ? TRANSPORT_MODE_LABELS[mode] : UNSET)
+const normName = (name: string) => name.normalize('NFD').replace(/\p{M}/gu, '').trim().toLowerCase().replace(/\s+/g, ' ')
+const countBy = <T,>(rows: T[], key: (r: T) => string | null | undefined) => {
+  const map = new Map<string, number>()
+  for (const r of rows) {
+    const k = key(r)
+    if (k) map.set(k, (map.get(k) ?? 0) + 1)
+  }
+  return [...map.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value)
+}
 
 const boardQuery = { queryKey: ['transport-board'], queryFn: () => api<BoardRow[]>('/transport/board') }
 const routesQuery = { queryKey: ['transport-routes'], queryFn: () => api<Route[]>('/transport/routes') }
 
 const fail = (fallback: string) => (error: unknown) => toast.error(error instanceof ApiError ? error.message : fallback)
+
+type Filters = { q: string; department: string; city: string; mode: TransportMode | 'unset' | ''; status: EmployeeStatus | '' }
+const NO_FILTERS: Filters = { q: '', department: '', city: '', mode: '', status: '' }
 
 export function MobilityPage() {
   const search = useSearch({ strict: false }) as { tab?: Tab }
@@ -85,7 +122,26 @@ export function MobilityPage() {
   const board = useQuery(boardQuery)
   const routes = useQuery(routesQuery)
   const [editing, setEditing] = useState<BoardRow | null>(null)
-  const rows = useMemo<Row[]>(() => (board.data ?? []).map(r => ({ ...r, id: r.employeeId })), [board.data])
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS)
+
+  // Mesmo nome mais de uma vez no cadastro: provável duplicidade.
+  const all = useMemo<Row[]>(() => {
+    const data = board.data ?? []
+    const names = countBy(data, r => normName(r.fullName))
+    const repeated = new Set(names.filter(n => n.value > 1).map(n => n.label))
+    return data.map(r => ({ ...r, id: r.employeeId, city: r.pickupCity ?? r.homeCity, duplicate: repeated.has(normName(r.fullName)) }))
+  }, [board.data])
+
+  const rows = all.filter(r => {
+    const term = filters.q.trim().toLowerCase()
+    if (term && ![r.fullName, r.registration, r.city, r.pickupDistrict, r.departmentName].some(v => v?.toLowerCase().includes(term))) return false
+    if (filters.department && r.departmentName !== filters.department) return false
+    if (filters.city && r.city !== filters.city) return false
+    if (filters.mode && (filters.mode === 'unset' ? r.mode !== null : r.mode !== filters.mode)) return false
+    if (filters.status && r.status !== filters.status) return false
+    return true
+  })
+  const filtered = rows.length !== all.length
 
   const download = async () => {
     try {
@@ -99,7 +155,7 @@ export function MobilityPage() {
     <>
       <PageHeader
         title="Mobilidade"
-        description="Como cada pessoa chega à obra: mobilidade, fretado, condução própria. Ocupação das rotas e dados para corrigir."
+        description="Transporte e localidade de cada colaborador: mobilidade, fretado e condução própria, com os pontos que precisam de cadastro."
         actions={
           <Button onClick={download}>
             <Download className="size-4" aria-hidden /> Exportar planilha
@@ -107,7 +163,7 @@ export function MobilityPage() {
         }
       />
 
-      <nav className="-mx-4 mb-6 flex gap-1 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0" aria-label="Seções de mobilidade">
+      <nav className="-mx-4 mb-4 flex gap-1 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0" aria-label="Seções de mobilidade">
         {TABS.filter(t => t.key !== 'atualizar' || manage).map(t => (
           <button
             key={t.key}
@@ -115,7 +171,7 @@ export function MobilityPage() {
             onClick={() => void navigate({ to: '/mobilidade', search: { tab: t.key } })}
             aria-current={tab === t.key ? 'page' : undefined}
             className={cn(
-              '-mb-px border-b-2 px-4 py-2.5 text-[15px] whitespace-nowrap transition-colors',
+              '-mb-px border-b-2 px-3.5 py-2.5 text-[14.5px] whitespace-nowrap transition-colors',
               tab === t.key ? 'border-ink font-semibold text-ink' : 'border-transparent text-steel hover:text-ink',
             )}
           >
@@ -124,17 +180,26 @@ export function MobilityPage() {
         ))}
       </nav>
 
+      {tab !== 'atualizar' && <FilterBar all={all} filters={filters} onChange={setFilters} shown={rows.length} />}
+
       {(board.isError || routes.isError) && <ErrorState error={board.error ?? routes.error} onRetry={() => void board.refetch()} />}
       {board.isPending || routes.isPending ? (
         <div className="flex flex-col gap-6">
           <Skeleton className="h-40" />
           <Skeleton className="h-80" />
         </div>
+      ) : all.length === 0 && tab !== 'atualizar' ? (
+        <EmptyState icon={Bus} title="Nenhum colaborador ativo">
+          Cadastre colaboradores para acompanhar a mobilidade.
+        </EmptyState>
       ) : (
         <>
-          {tab === 'visao' && <Overview rows={rows} routes={routes.data ?? []} />}
-          {tab === 'colaboradores' && <People rows={rows} routes={routes.data ?? []} onEdit={manage ? setEditing : undefined} />}
-          {tab === 'fretado' && <Routes routes={routes.data ?? []} rows={rows} />}
+          {tab === 'visao' && <Overview rows={rows} routes={routes.data ?? []} filtered={filtered} />}
+          {tab === 'colaboradores' && <People rows={rows} onEdit={manage ? setEditing : undefined} />}
+          {tab === 'mobilidade' && <MobilityList rows={rows} onEdit={manage ? setEditing : undefined} />}
+          {tab === 'fretado' && <Chartered rows={rows} routes={routes.data ?? []} onEdit={manage ? setEditing : undefined} />}
+          {tab === 'cidades' && <Cities rows={rows} onPick={city => setFilters(f => ({ ...f, city }))} />}
+          {tab === 'indicadores' && <Indicators rows={rows} />}
           {tab === 'qualidade' && <Quality rows={rows} routes={routes.data ?? []} onEdit={manage ? setEditing : undefined} />}
           {tab === 'atualizar' && manage && <ImportPanel />}
         </>
@@ -145,104 +210,188 @@ export function MobilityPage() {
   )
 }
 
-// ---------- visão geral ----------
+// ---------- filtros: valem para todas as abas ----------
 
-function Overview({ rows, routes }: { rows: Row[]; routes: Route[] }) {
-  const count = (mode: TransportMode | null) => rows.filter(r => r.mode === mode).length
-  const cost = rows.reduce((sum, r) => sum + (r.mode === 'mobility' || r.mode === 'chartered' ? (r.monthlyCostCents ?? 0) : 0), 0)
-  const capacity = routes.reduce((sum, r) => sum + (r.capacity ?? 0), 0)
-  const riders = routes.reduce((sum, r) => sum + r.riders, 0)
-  const onLeave = rows.filter(r => r.status === 'on_leave').length
-  const pie = [...TRANSPORT_MODES.map(mode => ({ key: mode, name: TRANSPORT_MODE_LABELS[mode], value: count(mode) })), { key: 'unset' as const, name: UNSET, value: count(null) }].filter(
-    d => d.value > 0,
-  )
-
-  if (rows.length === 0)
-    return (
-      <EmptyState icon={Bus} title="Nenhum colaborador ativo">
-        Cadastre colaboradores para acompanhar a mobilidade.
-      </EmptyState>
-    )
-
+function FilterBar({ all, filters, onChange, shown }: { all: Row[]; filters: Filters; onChange: (f: Filters) => void; shown: number }) {
+  const departments = useMemo(() => countBy(all, r => r.departmentName).map(d => d.label).sort(), [all])
+  const cities = useMemo(() => countBy(all, r => r.city).map(c => c.label).sort(), [all])
+  const set = <K extends keyof Filters>(key: K) => (value: Filters[K]) => onChange({ ...filters, [key]: value })
+  const active = JSON.stringify(filters) !== JSON.stringify(NO_FILTERS)
   return (
-    <div className="flex flex-col gap-6">
-      <section aria-label="Indicadores de mobilidade" className="grid overflow-hidden rounded-md border border-ink bg-paper md:grid-cols-[auto_1fr]">
-        <div className="blueprint flex items-end gap-6 bg-ink px-7 py-7">
-          <div>
-            <p className="text-sm text-steel-soft">Colaboradores</p>
-            <p className="num font-display text-[96px] leading-[0.82] font-semibold text-brand">
-              <CountUp value={rows.length} />
-            </p>
-          </div>
-          <div className="mb-1 text-sm leading-6 text-paper/85">
-            <p>
-              <span className="num font-semibold text-paper">{onLeave}</span> afastados
-            </p>
-            <p>
-              <span className="num font-semibold text-paper">{count(null)}</span> sem cadastro
-            </p>
-          </div>
-        </div>
-        <dl className="grid grid-cols-2 divide-line max-md:divide-y lg:grid-cols-4 lg:divide-x">
-          <Stat label="Mobilidade">
-            <CountUp value={count('mobility')} />
-          </Stat>
-          <Stat label="Fretado">
-            <CountUp value={count('chartered')} />
-          </Stat>
-          <Stat label="Ocupação do fretado" hint={`${riders} passageiros em ${capacity} lugares`}>
-            {capacity ? <CountUp value={riders / capacity} format={n => `${Math.round(n * 100)}%`} /> : '—'}
-          </Stat>
-          <Stat label="Custo mensal" hint="Soma dos custos informados de mobilidade e fretado">
-            <span className="text-[32px]">{money(cost)}</span>
-          </Stat>
-        </dl>
-      </section>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Modalidade de transporte">
-          <div className="grid items-center gap-4 sm:grid-cols-[220px_1fr]">
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={pie} dataKey="value" nameKey="name" innerRadius={58} outerRadius={96} paddingAngle={2} stroke="var(--color-paper)">
-                    {pie.map(d => (
-                      <Cell key={d.key} fill={MODE_COLORS[d.key]} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ borderRadius: 5, borderColor: 'var(--color-ink)', fontSize: 13 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <ul className="flex flex-col gap-2 text-sm">
-              {pie.map(d => (
-                <li key={d.key} className="flex items-center gap-3">
-                  <span className="size-3 rounded-sm" style={{ background: MODE_COLORS[d.key] }} aria-hidden />
-                  <span className="flex-1 text-ink-soft">{d.name}</span>
-                  <span className="num font-medium text-ink">{d.value}</span>
-                  <span className="num w-12 text-right text-steel">{Math.round((d.value / rows.length) * 100)}%</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </Panel>
-        <Panel title="Ocupação das rotas">
-          <Occupancy routes={routes} />
-        </Panel>
+    <div className="mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-paper p-2.5">
+      <div className="relative min-w-56 flex-1">
+        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-steel" aria-hidden />
+        <Input aria-label="Buscar" placeholder="Nome, matrícula, cidade ou bairro" value={filters.q} onChange={e => set('q')(e.target.value)} className="h-9 pl-9" />
       </div>
-      <Panel title="Cidades com mais colaboradores" aside={<span className="text-[13px] text-steel">Cidade de embarque ou, sem ela, de residência</span>}>
-        <CityChart rows={rows} limit={10} />
-      </Panel>
-      <Cities rows={rows} />
+      <Select aria-label="Departamento" value={filters.department} onChange={e => set('department')(e.target.value)} className="h-9 w-auto">
+        <option value="">Todos os departamentos</option>
+        {departments.map(d => (
+          <option key={d}>{d}</option>
+        ))}
+      </Select>
+      <Select aria-label="Cidade" value={filters.city} onChange={e => set('city')(e.target.value)} className="h-9 w-auto">
+        <option value="">Todas as cidades</option>
+        {cities.map(c => (
+          <option key={c}>{c}</option>
+        ))}
+      </Select>
+      <Select aria-label="Transporte" value={filters.mode} onChange={e => set('mode')(e.target.value as Filters['mode'])} className="h-9 w-auto">
+        <option value="">Todos os transportes</option>
+        {TRANSPORT_MODES.map(m => (
+          <option key={m} value={m}>
+            {TRANSPORT_MODE_LABELS[m]}
+          </option>
+        ))}
+        <option value="unset">{UNSET}</option>
+      </Select>
+      <Select aria-label="Situação" value={filters.status} onChange={e => set('status')(e.target.value as Filters['status'])} className="h-9 w-auto">
+        <option value="">Todas as situações</option>
+        <option value="active">Trabalhando</option>
+        <option value="on_leave">Afastado</option>
+      </Select>
+      {active && (
+        <Button size="sm" variant="ghost" onClick={() => onChange(NO_FILTERS)}>
+          <X className="size-4" aria-hidden /> Limpar filtros
+        </Button>
+      )}
+      <span className="ml-auto px-2 text-[13px] text-steel">
+        <span className="num font-semibold text-ink">{formatNumber(shown)}</span> colaboradores
+      </span>
     </div>
   )
 }
 
-function Stat({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+// ---------- peças visuais ----------
+
+const TONES = {
+  brand: 'bg-brand-soft text-brand-ink',
+  ink: 'bg-sunken text-ink',
+  info: 'bg-info-soft text-info',
+  ok: 'bg-ok-soft text-ok',
+  warn: 'bg-warn-soft text-brand-ink',
+  danger: 'bg-danger-soft text-danger',
+} as const
+
+function KpiCard({ icon: Icon, tone, label, value, note }: { icon: LucideIcon; tone: keyof typeof TONES; label: string; value: ReactNode; note: string }) {
   return (
-    <div className="px-6 py-5" title={hint}>
-      <dt className="text-sm text-steel">{label}</dt>
-      <dd className="num mt-1.5 font-display text-[44px] leading-none font-semibold text-ink">{children}</dd>
+    <div className="flex flex-col gap-1.5 rounded-xl border border-line bg-paper p-4 transition-[box-shadow,transform] duration-200 hover:-translate-y-px hover:shadow-md">
+      <span className={cn('mb-1 flex size-8 items-center justify-center rounded-lg', TONES[tone])}>
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <span className="text-[12.5px] font-medium text-steel">{label}</span>
+      <span className="num font-display text-[30px] leading-none font-semibold text-ink">{value}</span>
+      <span className="text-[12px] text-steel-soft">{note}</span>
+    </div>
+  )
+}
+
+/** Barras horizontais com rótulo, trilho e valor. */
+function HBars({ data, color = 'var(--color-ink)', empty = 'Sem dados neste recorte.' }: { data: { label: string; value: number }[]; color?: string; empty?: string }) {
+  if (!data.length) return <p className="text-sm text-steel">{empty}</p>
+  const max = Math.max(...data.map(d => d.value), 1)
+  return (
+    <ul className="flex flex-col gap-2.5">
+      {data.map((d, i) => (
+        <li key={d.label} className="grid grid-cols-[minmax(0,9.5rem)_1fr_3rem] items-center gap-3 text-[13px]">
+          <span className="truncate text-ink-soft" title={d.label}>
+            {d.label}
+          </span>
+          <span className="h-5 overflow-hidden rounded-md bg-sunken">
+            <span className="funnel-bar block h-full rounded-md" style={{ width: `${(d.value / max) * 100}%`, background: color, animationDelay: `${i * 40}ms` }} />
+          </span>
+          <span className="num text-right font-semibold text-ink">{formatNumber(d.value)}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Rosca com o total no centro e a legenda com participação. */
+function Donut({ data }: { data: { label: string; value: number; color: string }[] }) {
+  const items = data.filter(d => d.value > 0)
+  const total = items.reduce((s, d) => s + d.value, 0)
+  if (!total) return <p className="text-sm text-steel">Sem dados neste recorte.</p>
+  return (
+    <div className="flex flex-wrap items-center gap-6">
+      <div className="relative size-44 shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={items} dataKey="value" nameKey="label" innerRadius="66%" outerRadius="100%" paddingAngle={1.5} stroke="var(--color-paper)" startAngle={90} endAngle={-270}>
+              {items.map(d => (
+                <Cell key={d.label} fill={d.color} />
+              ))}
+            </Pie>
+            <Tooltip contentStyle={{ borderRadius: 8, borderColor: 'var(--color-line)', fontSize: 13 }} />
+          </PieChart>
+        </ResponsiveContainer>
+        <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <span className="num font-display text-[28px] leading-none font-semibold text-ink">{formatNumber(total)}</span>
+          <span className="text-[11.5px] text-steel">total</span>
+        </span>
+      </div>
+      <ul className="flex flex-col gap-2 text-[13px]">
+        {items.map(d => (
+          <li key={d.label} className="flex items-center gap-2">
+            <span className="size-2.5 rounded-sm" style={{ background: d.color }} aria-hidden />
+            <span className="num font-semibold text-ink">{formatNumber(d.value)}</span>
+            <span className="text-ink-soft">{d.label}</span>
+            <span className="text-steel-soft">({pct(d.value, total)})</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+const modeSlices = (rows: Row[], includeUnset = true) =>
+  [...TRANSPORT_MODES, ...(includeUnset ? (['unset'] as const) : [])].map(m => ({
+    label: m === 'unset' ? UNSET : TRANSPORT_MODE_LABELS[m],
+    value: rows.filter(r => (m === 'unset' ? r.mode === null : r.mode === m)).length,
+    color: MODE_COLORS[m],
+  }))
+
+// ---------- visão geral ----------
+
+function Overview({ rows, routes, filtered }: { rows: Row[]; routes: Route[]; filtered: boolean }) {
+  const total = rows.length
+  const count = (mode: TransportMode | null) => rows.filter(r => r.mode === mode).length
+  const cost = rows.reduce((s, r) => s + (r.monthlyCostCents ?? 0), 0)
+  const capacity = routes.reduce((s, r) => s + (r.capacity ?? 0), 0)
+  const riders = routes.reduce((s, r) => s + r.riders, 0)
+  const cities = new Set(rows.map(r => r.city).filter(Boolean)).size
+  const kpis: Parameters<typeof KpiCard>[0][] = [
+    { icon: Users, tone: 'ink', label: 'Total de colaboradores', value: <CountUp value={total} />, note: filtered ? 'No recorte filtrado' : 'Trabalhando e afastados' },
+    { icon: Smartphone, tone: 'brand', label: 'Mobilidade', value: <CountUp value={count('mobility')} />, note: `${pct(count('mobility'), total)} da base` },
+    { icon: Bus, tone: 'ink', label: 'Fretado', value: <CountUp value={count('chartered')} />, note: `${pct(count('chartered'), total)} da base` },
+    { icon: AlertTriangle, tone: 'danger', label: 'Sem transporte definido', value: <CountUp value={count(null)} />, note: 'Pendente de cadastro' },
+    { icon: PauseCircle, tone: 'warn', label: 'Afastados', value: <CountUp value={rows.filter(r => r.status === 'on_leave').length} />, note: 'Situação na ficha' },
+    { icon: MapPin, tone: 'ok', label: 'Cidades atendidas', value: <CountUp value={cities} />, note: 'Municípios distintos' },
+    { icon: Wallet, tone: 'info', label: 'Custo mensal', value: <span className="text-[24px]">{money(cost)}</span>, note: 'Mobilidade e fretado' },
+    { icon: Gauge, tone: riders > capacity ? 'danger' : 'ok', label: 'Ocupação do fretado', value: capacity ? pct(riders, capacity) : '—', note: `${riders} de ${capacity} lugares` },
+    { icon: Copy, tone: 'danger', label: 'Cadastros duplicados', value: <CountUp value={rows.filter(r => r.duplicate).length} />, note: 'Mesmo nome repetido' },
+    { icon: MapPin, tone: 'warn', label: 'Sem cidade', value: <CountUp value={rows.filter(r => !r.city).length} />, note: 'Endereço ou ponto ausente' },
+  ]
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        {kpis.map(k => (
+          <KpiCard key={k.label} {...k} />
+        ))}
+      </div>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Panel title="Cidades" aside={<span className="text-[13px] text-steel">Top 10 por número de colaboradores</span>}>
+          <HBars data={countBy(rows, r => r.city).slice(0, 10)} color="var(--color-brand)" />
+        </Panel>
+        <Panel title="Transporte" aside={<span className="text-[13px] text-steel">Distribuição por tipo</span>}>
+          <Donut data={modeSlices(rows)} />
+        </Panel>
+        <Panel title="Departamentos" aside={<span className="text-[13px] text-steel">Colaboradores por departamento</span>}>
+          <HBars data={countBy(rows, r => r.departmentName ?? 'Sem departamento').slice(0, 10)} />
+        </Panel>
+        <Panel title="Rotas do fretado" aside={<span className="text-[13px] text-steel">Passageiros por lugares</span>}>
+          <Occupancy routes={routes} />
+        </Panel>
+      </div>
     </div>
   )
 }
@@ -254,17 +403,17 @@ function Occupancy({ routes }: { routes: Route[] }) {
       {routes.map((r, i) => {
         const ratio = r.capacity ? r.riders / r.capacity : 0
         return (
-          <li key={r.id} className="grid grid-cols-[8rem_1fr_auto] items-center gap-3 text-sm">
+          <li key={r.id} className="grid grid-cols-[minmax(0,9.5rem)_1fr_4rem] items-center gap-3 text-[13px]">
             <span className="truncate text-ink-soft" title={r.name}>
               {r.name}
             </span>
-            <span className="relative h-3 overflow-hidden rounded-full bg-concrete">
+            <span className="h-5 overflow-hidden rounded-md bg-sunken">
               <span
-                className={cn('funnel-bar absolute inset-y-0 left-0 rounded-full', ratio > 1 ? 'bg-danger' : ratio > 0.85 ? 'bg-brand' : 'bg-ink')}
-                style={{ width: `${Math.min(100, ratio * 100)}%`, animationDelay: `${i * 60}ms` }}
+                className={cn('funnel-bar block h-full rounded-md', ratio > 1 ? 'bg-danger' : ratio > 0.85 ? 'bg-brand' : 'bg-ink')}
+                style={{ width: `${Math.min(100, ratio * 100)}%`, animationDelay: `${i * 40}ms` }}
               />
             </span>
-            <span className={cn('num w-20 text-right', ratio > 1 ? 'font-semibold text-danger' : 'text-ink')}>
+            <span className={cn('num text-right font-semibold', ratio > 1 ? 'text-danger' : 'text-ink')}>
               {r.riders}/{r.capacity ?? '—'}
             </span>
           </li>
@@ -274,117 +423,288 @@ function Occupancy({ routes }: { routes: Route[] }) {
   )
 }
 
-function CityChart({ rows, limit }: { rows: Row[]; limit?: number }) {
-  const data = useMemo(() => {
-    const map = new Map<string, Record<string, number>>()
-    for (const r of rows) {
-      const city = cityOf(r) ?? 'Sem cidade'
-      const entry = map.get(city) ?? { total: 0 }
-      entry.total = (entry.total ?? 0) + 1
-      const key = r.mode ?? 'unset'
-      entry[key] = (entry[key] ?? 0) + 1
-      map.set(city, entry)
-    }
-    return [...map.entries()]
-      .sort(([, a], [, b]) => (b.total ?? 0) - (a.total ?? 0))
-      .map(([city, v]) => ({ city, ...v }))
-      .slice(0, limit)
-  }, [rows, limit])
+// ---------- listas ----------
+
+const personColumn = {
+  label: 'Colaborador',
+  render: (r: Row) => (
+    <span>
+      <span className="flex items-center gap-1.5 font-medium text-ink">
+        {r.fullName}
+        {r.duplicate && <Badge tone="danger">duplicado?</Badge>}
+      </span>
+      <span className="text-[13px] text-steel">
+        {r.registration}
+        {r.departmentName ? `, ${r.departmentName}` : ''}
+      </span>
+    </span>
+  ),
+}
+
+function People({ rows, onEdit }: { rows: Row[]; onEdit?: (row: BoardRow) => void }) {
   return (
-    <div style={{ height: Math.max(200, data.length * 34 + 60) }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical" margin={{ left: 8, right: 16 }}>
-          <CartesianGrid stroke="var(--color-line)" horizontal={false} />
-          <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12, fill: 'var(--color-steel)' }} axisLine={false} tickLine={false} />
-          <YAxis type="category" dataKey="city" width={120} tick={{ fontSize: 12, fill: 'var(--color-steel)' }} axisLine={false} tickLine={false} />
-          <Tooltip contentStyle={{ borderRadius: 5, borderColor: 'var(--color-ink)', fontSize: 13 }} cursor={{ fill: 'var(--color-concrete)' }} />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-          {[...TRANSPORT_MODES, 'unset' as const].map(mode => (
-            <Bar key={mode} dataKey={mode} name={mode === 'unset' ? UNSET : TRANSPORT_MODE_LABELS[mode]} stackId="m" fill={MODE_COLORS[mode]} />
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+    <DataTable
+      rows={rows}
+      empty="Ninguém com esses filtros"
+      minWidth={960}
+      onRowClick={onEdit}
+      columns={[
+        personColumn,
+        { label: 'Situação', render: r => <Badge tone={statusTone(r.status)}>{statusLabel(r.status)}</Badge> },
+        { label: 'Transporte', render: r => (r.mode ? modeLabel(r.mode) : <Badge tone="danger">{UNSET}</Badge>) },
+        { label: 'Rota ou fornecedor', render: r => r.routeName ?? r.provider ?? '—' },
+        { label: 'Embarque', render: r => <span className="block max-w-56 truncate">{[r.pickupPoint, r.pickupDistrict].filter(Boolean).join(', ') || '—'}</span> },
+        { label: 'Cidade', render: r => r.city ?? '—' },
+        { label: 'Custo/mês', className: 'text-right', render: r => (r.monthlyCostCents === null ? '—' : <span className="num">{money(r.monthlyCostCents)}</span>) },
+      ]}
+    />
   )
 }
 
-// ---------- colaboradores ----------
-
-function People({ rows, routes, onEdit }: { rows: Row[]; routes: Route[]; onEdit?: (row: BoardRow) => void }) {
-  const [q, setQ] = useState('')
-  const [mode, setMode] = useState<TransportMode | 'unset' | ''>('')
-  const [routeId, setRouteId] = useState('')
-  const filtered = rows.filter(r => {
-    const term = q.trim().toLowerCase()
-    if (term && ![r.fullName, r.registration, cityOf(r), r.pickupDistrict].some(v => v?.toLowerCase().includes(term))) return false
-    if (mode && (mode === 'unset' ? r.mode !== null : r.mode !== mode)) return false
-    if (routeId && r.routeId !== routeId) return false
-    return true
-  })
+function MobilityList({ rows, onEdit }: { rows: Row[]; onEdit?: (row: BoardRow) => void }) {
+  const list = rows.filter(r => r.mode === 'mobility')
+  const cost = list.reduce((s, r) => s + (r.monthlyCostCents ?? 0), 0)
+  const withCost = list.filter(r => r.monthlyCostCents !== null).length
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-2 sm:flex sm:flex-wrap">
-        <div className="relative sm:w-72">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-steel" aria-hidden />
-          <Input aria-label="Buscar" placeholder="Nome, matrícula, cidade ou bairro" value={q} onChange={e => setQ(e.target.value)} className="h-10 pl-9" />
-        </div>
-        <Select aria-label="Modalidade" value={mode} onChange={e => setMode(e.target.value as typeof mode)} className="sm:w-56">
-          <option value="">Todas as modalidades</option>
-          {TRANSPORT_MODES.map(m => (
-            <option key={m} value={m}>
-              {TRANSPORT_MODE_LABELS[m]}
-            </option>
-          ))}
-          <option value="unset">{UNSET}</option>
-        </Select>
-        <Select aria-label="Rota" value={routeId} onChange={e => setRouteId(e.target.value)} className="sm:w-48">
-          <option value="">Todas as rotas</option>
-          {routes.map(r => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-        </Select>
-        <span className="self-center text-sm text-steel">{formatNumber(filtered.length)} pessoas</span>
+    <div className="flex flex-col gap-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiCard icon={Smartphone} tone="brand" label="Com mobilidade" value={<CountUp value={list.length} />} note={`${pct(list.length, rows.length)} da base`} />
+        <KpiCard icon={Wallet} tone="info" label="Custo mensal" value={<span className="text-[24px]">{money(cost)}</span>} note="Soma dos cartões e apps" />
+        <KpiCard icon={Wallet} tone="ok" label="Custo médio" value={<span className="text-[24px]">{withCost ? money(Math.round(cost / withCost)) : '—'}</span>} note="Por pessoa com valor informado" />
+        <KpiCard icon={AlertTriangle} tone="warn" label="Sem custo informado" value={<CountUp value={list.length - withCost} />} note="Custo mensal fica subestimado" />
       </div>
       <DataTable
-        rows={filtered}
-        empty="Ninguém com esses filtros"
-        minWidth={900}
+        rows={list}
+        empty="Ninguém com mobilidade neste recorte"
+        minWidth={820}
         onRowClick={onEdit}
         columns={[
-          {
-            label: 'Colaborador',
-            render: r => (
-              <span>
-                <span className="block font-medium text-ink">{r.fullName}</span>
-                <span className="text-[13px] text-steel">
-                  {r.registration}
-                  {r.departmentName ? ` · ${r.departmentName}` : ''}
-                </span>
-              </span>
-            ),
-          },
-          { label: 'Situação', render: r => <Badge tone={statusTone(r.status)}>{statusLabel(r.status)}</Badge> },
-          { label: 'Modalidade', render: r => (r.mode ? modeLabel(r.mode) : <Badge tone="danger">{UNSET}</Badge>) },
-          { label: 'Rota / fornecedor', render: r => r.routeName ?? r.provider ?? '—' },
-          {
-            label: 'Embarque',
-            render: r => (
-              <span className="block max-w-56 truncate" title={r.pickupPoint ?? undefined}>
-                {[r.pickupPoint, r.pickupDistrict].filter(Boolean).join(' · ') || '—'}
-              </span>
-            ),
-          },
-          { label: 'Cidade', render: r => cityOf(r) ?? '—' },
-          { label: 'Custo/mês', className: 'text-right', render: r => (r.monthlyCostCents === null ? '—' : <span className="num">{money(r.monthlyCostCents)}</span>) },
+          personColumn,
+          { label: 'Fornecedor', render: r => r.provider ?? '—' },
+          { label: 'Bairro', render: r => r.pickupDistrict ?? r.homeDistrict ?? '—' },
+          { label: 'Cidade', render: r => r.city ?? '—' },
+          { label: 'Custo/mês', className: 'text-right', render: r => (r.monthlyCostCents === null ? <Badge tone="warn">sem valor</Badge> : <span className="num">{money(r.monthlyCostCents)}</span>) },
         ]}
       />
     </div>
   )
 }
 
-// ---------- fretado ----------
+function Chartered({ rows, routes, onEdit }: { rows: Row[]; routes: Route[]; onEdit?: (row: BoardRow) => void }) {
+  const list = rows.filter(r => r.mode === 'chartered')
+  return (
+    <div className="flex flex-col gap-6">
+      <Routes routes={routes} rows={list} />
+      <Panel title="Passageiros" aside={<span className="text-[13px] text-steel">Ponto de embarque de cada pessoa no fretado</span>} bodyClassName="p-0">
+        <DataTable
+          rows={list}
+          empty="Ninguém no fretado neste recorte"
+          minWidth={820}
+          onRowClick={onEdit}
+          columns={[
+            personColumn,
+            { label: 'Rota', render: r => r.routeName ?? <Badge tone="danger">sem rota</Badge> },
+            { label: 'Ponto de embarque', render: r => r.pickupPoint ?? <Badge tone="warn">não informado</Badge> },
+            { label: 'Bairro', render: r => r.pickupDistrict ?? '—' },
+            { label: 'Cidade', render: r => r.city ?? '—' },
+          ]}
+        />
+      </Panel>
+    </div>
+  )
+}
+
+// ---------- cidades ----------
+
+function Cities({ rows, onPick }: { rows: Row[]; onPick: (city: string) => void }) {
+  const cities = useMemo(() => {
+    const map = new Map<string, { name: string; total: number; mobility: number; chartered: number; cost: number }>()
+    for (const r of rows) {
+      if (!r.city) continue
+      const c = map.get(r.city) ?? { name: r.city, total: 0, mobility: 0, chartered: 0, cost: 0 }
+      c.total++
+      if (r.mode === 'mobility') c.mobility++
+      if (r.mode === 'chartered') c.chartered++
+      c.cost += r.monthlyCostCents ?? 0
+      map.set(r.city, c)
+    }
+    return [...map.values()].sort((a, b) => b.total - a.total)
+  }, [rows])
+  if (!cities.length) return <EmptyState icon={MapPin} title="Nenhuma cidade identificada neste recorte" />
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      {cities.map(c => (
+        <button
+          key={c.name}
+          type="button"
+          onClick={() => onPick(c.name)}
+          title="Filtrar por esta cidade"
+          className="rounded-xl border border-line bg-paper p-4 text-left transition-[box-shadow,transform,border-color] duration-200 hover:-translate-y-px hover:border-line-strong hover:shadow-md"
+        >
+          <span className="mb-3 flex items-center gap-2 font-semibold text-ink">
+            <MapPin className="size-4 text-brand-ink" aria-hidden /> {c.name}
+          </span>
+          {[
+            ['Colaboradores', formatNumber(c.total)],
+            ['Mobilidade', formatNumber(c.mobility)],
+            ['Fretado', formatNumber(c.chartered)],
+            ['Custo mensal', money(c.cost)],
+          ].map(([label, value]) => (
+            <span key={label} className="flex justify-between py-0.5 text-[13px]">
+              <span className="text-steel">{label}</span>
+              <span className="num font-semibold text-ink">{value}</span>
+            </span>
+          ))}
+          <span className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-sunken" aria-hidden>
+            <span style={{ width: `${(c.mobility / c.total) * 100}%`, background: MODE_COLORS.mobility }} />
+            <span style={{ width: `${(c.chartered / c.total) * 100}%`, background: MODE_COLORS.chartered }} />
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ---------- indicadores ----------
+
+function Indicators({ rows }: { rows: Row[] }) {
+  return (
+    <div className="grid gap-6 xl:grid-cols-2">
+      <Panel title="Todas as cidades" aside={<span className="text-[13px] text-steel">Por total de colaboradores</span>}>
+        <div className="max-h-[420px] overflow-y-auto pr-1">
+          <HBars data={countBy(rows, r => r.city)} color="var(--color-brand)" />
+        </div>
+      </Panel>
+      <Panel title="Cargos" aside={<span className="text-[13px] text-steel">Top 10 por número de colaboradores</span>}>
+        <HBars data={countBy(rows, r => r.positionTitle ?? 'Cargo não informado').slice(0, 10)} empty="Nenhum cargo neste recorte." />
+      </Panel>
+      <Panel title="Situação" aside={<span className="text-[13px] text-steel">Trabalhando e afastados</span>}>
+        <Donut
+          data={[
+            { label: 'Trabalhando', value: rows.filter(r => r.status === 'active').length, color: 'var(--color-ok)' },
+            { label: 'Afastado', value: rows.filter(r => r.status === 'on_leave').length, color: 'var(--color-brand)' },
+          ]}
+        />
+      </Panel>
+      <Panel title="Participação de cada transporte" aside={<span className="text-[13px] text-steel">Sobre quem tem transporte definido</span>}>
+        <Donut data={modeSlices(rows, false)} />
+      </Panel>
+    </div>
+  )
+}
+
+// ---------- qualidade dos dados ----------
+
+function ScoreRing({ score }: { score: number }) {
+  const r = 46
+  const circ = 2 * Math.PI * r
+  const color = score >= 85 ? 'var(--color-ok)' : score >= 65 ? 'var(--color-brand)' : 'var(--color-danger)'
+  return (
+    <div className="relative size-[120px] shrink-0">
+      <svg viewBox="0 0 120 120" className="size-full -rotate-90" aria-hidden>
+        <circle cx="60" cy="60" r={r} fill="none" stroke="var(--color-sunken)" strokeWidth="12" />
+        <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="12" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ - (score / 100) * circ} />
+      </svg>
+      <span className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="num font-display text-[30px] leading-none font-semibold text-ink">{score}%</span>
+        <span className="text-[11.5px] text-steel">qualidade</span>
+      </span>
+    </div>
+  )
+}
+
+function IssueList({ title, hint, rows, onEdit, empty }: { title: string; hint: string; rows: Row[]; onEdit?: (row: BoardRow) => void; empty: string }) {
+  return (
+    <Panel
+      title={
+        <span className="flex items-center gap-2">
+          {rows.length ? <AlertTriangle className="size-4 text-danger" aria-hidden /> : <CheckCircle2 className="size-4 text-ok" aria-hidden />}
+          {title}
+        </span>
+      }
+      aside={<span className="num text-sm font-semibold text-ink">{rows.length}</span>}
+      bodyClassName="p-0"
+    >
+      <p className="px-5 pt-3 text-[13px] text-steel">{rows.length ? hint : empty}</p>
+      {rows.length > 0 && (
+        <ul className="mt-2 max-h-60 divide-y divide-line overflow-y-auto border-t border-line">
+          {rows.map(r => (
+            <li key={r.id}>
+              <button
+                type="button"
+                disabled={!onEdit}
+                onClick={() => onEdit?.(r)}
+                className="flex w-full justify-between gap-3 px-5 py-2 text-left text-sm enabled:hover:bg-sunken"
+              >
+                <span className="truncate text-ink">{r.fullName}</span>
+                <span className="text-[13px] text-steel">{r.registration}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  )
+}
+
+function Quality({ rows, routes, onEdit }: { rows: Row[]; routes: Route[]; onEdit?: (row: BoardRow) => void }) {
+  const duplicates = rows.filter(r => r.duplicate)
+  const noCity = rows.filter(r => !r.city)
+  const noTransport = rows.filter(r => r.mode === null)
+  const noPosition = rows.filter(r => !r.positionTitle)
+  const issues = new Set([...duplicates, ...noCity, ...noTransport].map(r => r.id)).size
+  const score = rows.length ? Math.max(0, Math.round(100 - (issues / rows.length) * 100)) : 100
+  const overbooked = routes.filter(r => r.capacity !== null && r.riders > r.capacity)
+  const summary: [string, number, string][] = [
+    ['Registros completos', rows.length - issues, 'text-ok'],
+    ['Nomes duplicados', duplicates.length, 'text-danger'],
+    ['Sem cidade', noCity.length, 'text-brand-ink'],
+    ['Sem transporte definido', noTransport.length, 'text-danger'],
+    ['Sem cargo cadastrado', noPosition.length, 'text-brand-ink'],
+  ]
+  const more = [
+    { title: 'Afastados com transporte ativo', hint: 'Afastados não deveriam consumir fretado nem crédito de mobilidade.', rows: rows.filter(r => r.status === 'on_leave' && (r.mode === 'chartered' || r.mode === 'mobility')) },
+    { title: 'Fretado sem ponto de embarque', hint: 'O motorista não sabe onde buscar.', rows: rows.filter(r => r.mode === 'chartered' && !r.pickupPoint) },
+    { title: 'Mobilidade sem custo informado', hint: 'Sem o valor, o custo mensal fica subestimado.', rows: rows.filter(r => r.mode === 'mobility' && r.monthlyCostCents === null) },
+  ]
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center gap-8 rounded-xl border border-line bg-paper p-6">
+        <ScoreRing score={score} />
+        <dl className="grid min-w-64 flex-1 gap-x-10 gap-y-1.5 sm:grid-cols-2">
+          {summary.map(([label, value, tone]) => (
+            <div key={label} className="flex justify-between border-b border-line py-1.5 text-sm">
+              <dt className="text-steel">{label}</dt>
+              <dd className={cn('num font-semibold', tone)}>{formatNumber(value)}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      {overbooked.length > 0 && (
+        <p className="flex flex-wrap items-center gap-2 rounded-xl border border-danger/25 bg-danger-soft px-4 py-3 text-sm text-danger">
+          <Building2 className="size-4" aria-hidden /> Rotas acima da capacidade:
+          {overbooked.map(r => (
+            <Badge key={r.id} tone="danger">
+              {r.name}: {r.riders}/{r.capacity}
+            </Badge>
+          ))}
+        </p>
+      )}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <IssueList title="Nomes duplicados" hint="O mesmo nome aparece mais de uma vez no cadastro." empty="Nenhum nome duplicado neste recorte." rows={duplicates} onEdit={onEdit} />
+        <IssueList title="Sem cidade" hint="Sem ponto de embarque nem endereço com cidade na ficha." empty="Todos têm cidade identificada." rows={noCity} onEdit={onEdit} />
+        <IssueList title="Sem transporte definido" hint="Nenhuma modalidade registrada." empty="Todos têm transporte definido." rows={noTransport} onEdit={onEdit} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        {more.map(m => (
+          <IssueList key={m.title} {...m} empty="Nada a corrigir aqui." onEdit={onEdit} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------- fretado: rotas ----------
 
 function Routes({ routes, rows }: { routes: Route[]; rows: Row[] }) {
   const manage = useCan('transport.manage')
@@ -516,125 +836,6 @@ function RouteDrawer({ route, onClose }: { route: Route | null; onClose: () => v
         <Field label="Motorista ou empresa">{props => <Input {...props} value={form.driver} onChange={set('driver')} />}</Field>
       </form>
     </Drawer>
-  )
-}
-
-// ---------- cidades ----------
-
-function Cities({ rows }: { rows: Row[] }) {
-  const table = useMemo(() => {
-    const map = new Map<string, { id: string; city: string; total: number; chartered: number; mobility: number; cost: number }>()
-    for (const r of rows) {
-      const city = cityOf(r) ?? 'Sem cidade'
-      const e = map.get(city) ?? { id: city, city, total: 0, chartered: 0, mobility: 0, cost: 0 }
-      e.total++
-      if (r.mode === 'chartered') e.chartered++
-      if (r.mode === 'mobility') e.mobility++
-      e.cost += r.monthlyCostCents ?? 0
-      map.set(city, e)
-    }
-    return [...map.values()].sort((a, b) => b.total - a.total)
-  }, [rows])
-  return (
-    <DataTable
-      rows={table}
-      empty="Sem dados"
-      columns={[
-        { label: 'Cidade', render: c => <span className="font-medium text-ink">{c.city}</span> },
-        { label: 'Colaboradores', render: c => <span className="num">{c.total}</span> },
-        { label: 'Fretado', render: c => <span className="num">{c.chartered}</span> },
-        { label: 'Mobilidade', render: c => <span className="num">{c.mobility}</span> },
-        { label: 'Custo/mês', className: 'text-right', render: c => <span className="num">{money(c.cost)}</span> },
-      ]}
-    />
-  )
-}
-
-// ---------- qualidade dos dados ----------
-
-function Quality({ rows, routes, onEdit }: { rows: Row[]; routes: Route[]; onEdit?: (row: BoardRow) => void }) {
-  const checks: { title: string; hint: string; rows: Row[] }[] = [
-    { title: 'Sem modalidade cadastrada', hint: 'Ninguém sabe como essa pessoa chega à obra.', rows: rows.filter(r => r.mode === null) },
-    {
-      title: 'Afastados com transporte ativo',
-      hint: 'Afastados não deveriam consumir fretado nem crédito de mobilidade.',
-      rows: rows.filter(r => r.status === 'on_leave' && (r.mode === 'chartered' || r.mode === 'mobility')),
-    },
-    { title: 'Fretado sem ponto de embarque', hint: 'O motorista não sabe onde buscar.', rows: rows.filter(r => r.mode === 'chartered' && !r.pickupPoint) },
-    { title: 'Fretado sem rota', hint: 'A rota foi excluída ou nunca foi informada.', rows: rows.filter(r => r.mode === 'chartered' && !r.routeId) },
-    { title: 'Mobilidade sem custo informado', hint: 'Sem o valor, o custo mensal fica subestimado.', rows: rows.filter(r => r.mode === 'mobility' && r.monthlyCostCents === null) },
-    { title: 'Sem cidade', hint: 'Nem cidade de embarque nem endereço na ficha.', rows: rows.filter(r => !cityOf(r)) },
-    {
-      title: 'Embarque em cidade diferente da residência',
-      hint: 'Pode ser endereço desatualizado na ficha.',
-      rows: rows.filter(r => r.pickupCity && r.homeCity && r.pickupCity.trim().toLowerCase() !== r.homeCity.trim().toLowerCase()),
-    },
-  ]
-  const overbooked = routes.filter(r => r.capacity !== null && r.riders > r.capacity)
-  const issues = checks.reduce((sum, c) => sum + c.rows.length, 0) + overbooked.length
-  const score = rows.length ? Math.max(0, 1 - checks[0]!.rows.length / rows.length) : 1
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-6 rounded-md border border-line bg-paper px-6 py-5">
-        <div>
-          <p className="text-sm text-steel">Cobertura do cadastro</p>
-          <p className="num font-display text-5xl font-semibold text-ink">
-            <CountUp value={score} format={n => `${Math.round(n * 100)}%`} />
-          </p>
-        </div>
-        <p className="max-w-lg text-sm text-steel">
-          {issues === 0 ? 'Nenhuma inconsistência encontrada.' : `${issues} pontos para conferir. Clique numa pessoa para corrigir.`}
-        </p>
-      </div>
-      {overbooked.length > 0 && (
-        <Panel title={`Rotas acima da capacidade (${overbooked.length})`}>
-          <ul className="flex flex-wrap gap-2 text-sm">
-            {overbooked.map(r => (
-              <li key={r.id}>
-                <Badge tone="danger">
-                  {r.name}: {r.riders}/{r.capacity}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      )}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {checks.map(check => (
-          <Panel
-            key={check.title}
-            title={
-              <span className="flex items-center gap-2">
-                {check.rows.length ? <AlertTriangle className="size-4 text-danger" aria-hidden /> : <CheckCircle2 className="size-4 text-ok" aria-hidden />}
-                {check.title}
-              </span>
-            }
-            aside={<span className="num text-sm font-semibold text-ink">{check.rows.length}</span>}
-            bodyClassName="p-0"
-          >
-            <p className="px-5 pt-3 text-[13px] text-steel">{check.hint}</p>
-            {check.rows.length > 0 && (
-              <ul className="mt-2 max-h-56 divide-y divide-line overflow-y-auto border-t border-line">
-                {check.rows.map(r => (
-                  <li key={r.id}>
-                    <button
-                      type="button"
-                      disabled={!onEdit}
-                      onClick={() => onEdit?.(r)}
-                      className="flex w-full justify-between gap-3 px-5 py-2 text-left text-sm enabled:hover:bg-concrete/50"
-                    >
-                      <span className="truncate text-ink">{r.fullName}</span>
-                      <span className="text-[13px] text-steel">{r.registration}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Panel>
-        ))}
-      </div>
-    </div>
   )
 }
 
