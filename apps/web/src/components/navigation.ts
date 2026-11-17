@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   UserCog,
   Users,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -40,6 +41,7 @@ export const NAV: NavItem[] = [
   { to: '/talentos', label: 'Banco de talentos', description: 'Fichas, etiquetas e convites', icon: Contact, permission: 'talent_pool.read', section: 'Gestão' },
   { to: '/recrutamento/pagina-de-vagas', label: 'Página de vagas', description: 'Editar a página pública de recrutamento', icon: Globe, permission: 'recruitment.manage', section: 'Gestão' },
   { to: '/mobilidade', label: 'Mobilidade', description: 'Transporte, fretado e qualidade dos dados', icon: Bus, permission: 'transport.read', section: 'Gestão' },
+  { to: '/beneficios', label: 'Benefícios', description: 'VA/VR, histórico de valores e apuração mensal', icon: Wallet, permission: 'benefits.read', section: 'Gestão' },
   { to: '/estrutura', label: 'Estrutura', description: 'Organograma, departamentos e cargos', icon: Building2, permission: 'org.read', section: 'Gestão' },
   { to: '/meu-cadastro', label: 'Meu cadastro', description: 'Seus dados e documentos', icon: IdCard, permission: 'self.read', section: 'Pessoal', needsEmployee: true },
   { to: '/minhas-solicitacoes', label: 'Férias e ausências', description: 'Seu saldo e seus pedidos', icon: Palmtree, permission: 'self.request', section: 'Pessoal', needsEmployee: true },

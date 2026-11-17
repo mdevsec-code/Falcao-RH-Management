@@ -45,8 +45,11 @@ Verificação: 102 testes de unidade e integração (PostgreSQL real em memória
 | Admissão digital: link de uso único para o novo colaborador enviar dados e documentos | Entregue; documentos caem em "Documentos admissionais" |
 | Candidatos estrangeiros: nacionalidade, passaporte, RNM e visto | Entregue no banco de talentos |
 | Mobilidade e transporte: fretado com ocupação, mobilidade, cidades, qualidade dos dados, planilha | Entregue |
+| Benefícios VA/VR: planos com histórico de valores, benefício de cada pessoa, apuração mensal com ajuste e fechamento, planilha | Entregue; regra padrão de dias úteis (seg. a sex.) menos férias e ausências aprovadas |
 
-Próximos do Portal do RH: benefícios (apuração mensal de VA/VR, benefício escolhido e histórico de valores, depende das regras de dias úteis e da convenção coletiva) e acompanhamento de afastamentos.
+Pendências dos benefícios: feriados (sem calendário, o RH ajusta os dias), rateio quando a pessoa troca de plano no meio do mês e validação da regra com a convenção coletiva.
+
+Próximo do Portal do RH: acompanhamento de afastamentos.
 
 | Módulo | Observação |
 | --- | --- |

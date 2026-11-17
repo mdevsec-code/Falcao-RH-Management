@@ -34,6 +34,7 @@ import { requestRoutes } from './modules/requests/requests.routes'
 import { settingsRoutes } from './modules/settings/settings.routes'
 import { transferRoutes } from './modules/employees/transfer.routes'
 import { transportRoutesPlugin } from './modules/transport/transport.routes'
+import { benefitRoutes } from './modules/benefits/benefits.routes'
 import { admissionPublicRoutes, admissionRoutes } from './modules/admission/admission.routes'
 import { userRoutes } from './modules/users/users.routes'
 
@@ -143,6 +144,7 @@ export const buildApp = async (deps: AppDeps, options: FastifyServerOptions = {}
       await api.register(careerPageRoutes(deps))
       await api.register(transportRoutesPlugin(deps))
       await api.register(admissionRoutes(deps))
+      await api.register(benefitRoutes(deps))
     },
     { prefix: '/api/v1' },
   )

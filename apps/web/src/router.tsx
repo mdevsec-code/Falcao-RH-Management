@@ -130,6 +130,14 @@ const recruitmentRoute = createRoute({
   component: lazyRouteComponent(() => import('./pages/recruitment'), 'RecruitmentPage'),
 })
 
+const benefitsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/beneficios',
+  validateSearch: z.object({ tab: z.enum(['apuracao', 'colaboradores', 'planos']).optional(), apuracao: z.string().optional() }),
+  beforeLoad: guard('benefits.read'),
+  component: lazyRouteComponent(() => import('./pages/benefits'), 'BenefitsPage'),
+})
+
 const recruitmentInsightsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/recrutamento/painel',
@@ -248,6 +256,7 @@ const routeTree = rootRoute.addChildren([
     careersEditorRoute,
     talentPoolRoute,
     mobilityRoute,
+    benefitsRoute,
     recruitmentInsightsRoute,
     jobBoardRoute,
     portalRoute,
