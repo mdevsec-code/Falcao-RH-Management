@@ -172,7 +172,7 @@ export const downloadUrl = async (tx: Tx, ctx: Ctx, storage: Storage, id: string
 
 // ---------- envio ----------
 
-const checkFile = (file: UploadedFile) => {
+export const checkFile = (file: UploadedFile) => {
   if (file.buffer.length === 0) throw badRequest('O arquivo está vazio.')
   if (file.buffer.length > MAX_UPLOAD_BYTES) throw new AppError(413, 'file_too_large', 'O arquivo passa de 10 MB.')
   const filename = safeFilename(file.filename)

@@ -187,8 +187,8 @@ describe('quadro de candidaturas', () => {
     expect((await call('hr', 'POST', `/applications/${application.id}/stage`, { stageId: stages[2]!.id })).statusCode).toBe(200)
     const history = await events(application.id)
     expect(history.map(e => [e.fromLabel, e.toLabel, e.actorUserId])).toEqual([
-      ['Cadastro do candidato', 'Triagem', org.users.manager!.id],
-      ['Triagem', 'Entrevista/agendamento', org.users.hr!.id],
+      ['Recepção do currículo', 'Triagem do currículo', org.users.manager!.id],
+      ['Triagem do currículo', 'Contatar o candidato', org.users.hr!.id],
     ])
   })
 
@@ -244,7 +244,7 @@ describe('quadro de candidaturas', () => {
     })
     const hr = (await call('hr', 'GET', `/applications/${first.id}`)).json()
     expect(hr.candidate).toMatchObject({ cpf: '52998224725', email, phone: '81999998888' })
-    expect(hr.otherApplications).toEqual([expect.objectContaining({ jobTitle: 'Vaga sem o gestor', stage: 'Cadastro do candidato' })])
+    expect(hr.otherApplications).toEqual([expect.objectContaining({ jobTitle: 'Vaga sem o gestor', stage: 'Recepção do currículo' })])
     const manager = (await call('manager', 'GET', `/applications/${first.id}`)).json()
     expect(manager.candidate.cpf).toBeUndefined()
     expect(manager.candidate.email).toBe(email)
@@ -306,7 +306,7 @@ describe('contratação', () => {
     const fresh = await seedApplication(jobId)
     const response = await call('hr', 'POST', `/applications/${fresh.id}/hire`, employeeBody())
     expect(response.statusCode).toBe(409)
-    expect(response.json().message).toBe('Mova o candidato para além da etapa Cadastro do candidato antes de contratar.')
+    expect(response.json().message).toBe('Mova o candidato para além da etapa Recepção do currículo antes de contratar.')
     const rejected = await seedApplication(jobId, { status: 'rejected', stageId: null })
     expect((await call('hr', 'POST', `/applications/${rejected.id}/hire`, employeeBody())).statusCode).toBe(409)
   })
@@ -436,7 +436,7 @@ describe('banco de talentos', () => {
     expect(response.statusCode).toBe(200)
     expect(response.json()).toMatchObject({
       fullName: 'Ficha Completa',
-      applications: [expect.objectContaining({ id: application.id, jobTitle: 'Vaga do banco', stage: 'Cadastro do candidato', notes: [expect.objectContaining({ body: 'Boa conversa' })] })],
+      applications: [expect.objectContaining({ id: application.id, jobTitle: 'Vaga do banco', stage: 'Recepção do currículo', notes: [expect.objectContaining({ body: 'Boa conversa' })] })],
       files: [],
     })
   })

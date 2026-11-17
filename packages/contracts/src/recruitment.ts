@@ -30,7 +30,7 @@ export const APPLICATION_OUTCOME_LABELS: Record<ApplicationOutcome, string> = {
  * Etapas de contratação de toda organização (definidas pela Falcão em
  * 09/11/2026). A primeira é fixa: não muda de nome nem sai.
  */
-export const DEFAULT_STAGES = ['Cadastro do candidato', 'Triagem', 'Entrevista/agendamento', 'Teste prático', 'Pesquisa de referência', 'Exame admissional', 'Solicitação de documentos', 'Resultados da seleção', 'Admissão'] as const
+export const DEFAULT_STAGES = ['Recepção do currículo', 'Triagem do currículo', 'Contatar o candidato', 'Agendar entrevista', 'Avaliação dos supervisores', 'Tratativa interna RH', 'Programação de exames', 'Solicitação de documentos', 'Contratação'] as const
 export const MAX_STAGES = 15
 
 const stageKey = (name: string) => name.trim().toLocaleLowerCase('pt-BR')
@@ -207,6 +207,17 @@ export type CandidateFilters = z.infer<typeof candidateFilters>
 export const candidateUpdate = z.object({
   tags: z.array(z.string().trim().min(1, 'Escreva a etiqueta.').max(40, 'Use até 40 caracteres na etiqueta.')).max(20, 'Use até 20 etiquetas.'),
 })
+/** Candidato estrangeiro: documentos de migração conferidos pelo RH. `null` = brasileiro. */
+export const foreignCandidate = z.object({
+  nationality: z.string().trim().min(2, 'Informe a nacionalidade.').max(60),
+  passport: z.string().trim().max(30).default(''),
+  rnm: z.string().trim().max(30).default(''),
+  visaType: z.string().trim().max(60).default(''),
+  visaExpiresAt: z.iso.date().nullable().default(null),
+  languages: z.string().trim().max(160).default(''),
+})
+export type ForeignCandidate = z.infer<typeof foreignCandidate>
+export const candidateForeignUpdate = z.object({ foreign: foreignCandidate.nullable() })
 export const candidateMerge = z.object({ sourceId: uuid })
 export const candidateInvite = z.object({ jobId: uuid })
 

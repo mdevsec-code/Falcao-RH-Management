@@ -24,7 +24,7 @@ import { createEmployee, scopeCondition } from './employees.service'
 type ColumnKey = (typeof IMPORT_COLUMNS)[number][0]
 
 /** "Data de Admissão" → "data de admissao": compara cabeçalhos sem acento nem caixa. */
-const normalize = (value: string) =>
+export const normalize = (value: string) =>
   value
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
@@ -126,7 +126,7 @@ export const importTemplate = async (tx: Tx) => {
 
 // ---------- leitura da planilha ----------
 
-type Cell = string | number | boolean | Date | null
+export type Cell = string | number | boolean | Date | null
 
 const parseCsv = (text: string): Cell[][] => {
   const delimiter = (text.split('\n')[0] ?? '').split(';').length > (text.split('\n')[0] ?? '').split(',').length ? ';' : ','
@@ -158,7 +158,7 @@ const parseCsv = (text: string): Cell[][] => {
   return rows
 }
 
-const readSheet = async (buffer: Buffer, filename: string): Promise<Cell[][]> => {
+export const readSheet = async (buffer: Buffer, filename: string): Promise<Cell[][]> => {
   if (filename.toLowerCase().endsWith('.csv')) return parseCsv(buffer.toString('utf8').replace(/^﻿/, ''))
   const workbook = new ExcelJS.Workbook()
   try {

@@ -36,6 +36,18 @@ Verificação: 102 testes de unidade e integração (PostgreSQL real em memória
 
 ## Fase 6: expansão
 
+### Portal do RH: entregue em 17/11/2026
+
+| Entrega | Situação |
+| --- | --- |
+| Etapas do processo seletivo da Falcão (Recepção do currículo → Contratação) como padrão | Entregue; organizações existentes ajustam em Configurações |
+| Painel de R&S: funil, recusas por etapa, conversão, dias até contratar | Entregue (RH e administração) |
+| Admissão digital: link de uso único para o novo colaborador enviar dados e documentos | Entregue; documentos caem em "Documentos admissionais" |
+| Candidatos estrangeiros: nacionalidade, passaporte, RNM e visto | Entregue no banco de talentos |
+| Mobilidade e transporte: fretado com ocupação, mobilidade, cidades, qualidade dos dados, planilha | Entregue |
+
+Próximos do Portal do RH: benefícios (apuração mensal de VA/VR, benefício escolhido e histórico de valores, depende das regras de dias úteis e da convenção coletiva) e acompanhamento de afastamentos.
+
 | Módulo | Observação |
 | --- | --- |
 | 10 Treinamentos | Prioridade alta numa construtora: NRs obrigatórias com validade, ligadas aos documentos que já vencem e avisam |

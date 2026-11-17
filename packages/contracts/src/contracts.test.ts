@@ -96,24 +96,24 @@ describe('Recrutamento', () => {
   it('situações da candidatura e etapas iniciais', () => {
     expect(APPLICATION_STATUSES).toEqual(['open', 'hired', 'rejected'])
     expect(APPLICATION_STATUS_LABELS).toEqual({ open: 'Em andamento', hired: 'Contratado', rejected: 'Recusado' })
-    expect(DEFAULT_STAGES).toEqual(['Cadastro do candidato', 'Triagem', 'Entrevista/agendamento', 'Teste prático', 'Pesquisa de referência', 'Exame admissional', 'Solicitação de documentos', 'Resultados da seleção', 'Admissão'])
+    expect(DEFAULT_STAGES).toEqual(['Recepção do currículo', 'Triagem do currículo', 'Contatar o candidato', 'Agendar entrevista', 'Avaliação dos supervisores', 'Tratativa interna RH', 'Programação de exames', 'Solicitação de documentos', 'Contratação'])
   })
 
   it('stagesInput: 1 a 15 etapas, nomes de 3 a 40 caracteres, sem repetir', () => {
     const named = (...names: string[]) => ({ stages: names.map(name => ({ name })) })
-    expect(stagesInput.safeParse(named('Novo', 'Triagem', 'Exame admissional (ASO)')).success).toBe(true)
+    expect(stagesInput.safeParse(named('Novo', 'Triagem do currículo', 'Exame admissional (ASO)')).success).toBe(true)
     expect(stagesInput.safeParse({ stages: [] }).success).toBe(false)
     expect(stagesInput.safeParse(named(...Array.from({ length: 16 }, (_, i) => `Etapa ${i}`))).success).toBe(false)
     expect(stagesInput.safeParse(named('Novo', 'AB')).success).toBe(false)
     expect(stagesInput.safeParse(named('Novo', 'x'.repeat(41))).success).toBe(false)
-    expect(stagesInput.safeParse(named('Novo', 'Triagem', ' triagem ')).success).toBe(false)
+    expect(stagesInput.safeParse(named('Novo', 'Triagem do currículo', ' triagem do currículo ')).success).toBe(false)
     expect(stagesInput.safeParse({ stages: [{ id: 'nao-e-uuid', name: 'Novo' }] }).success).toBe(false)
   })
 
   it('stagesInput ignora o nome da primeira etapa (sempre a inicial)', () => {
     // A primeira é a etapa fixa: o nome dela não conta, e "novo" em outra posição repete.
-    expect(stagesInput.safeParse({ stages: [{ name: 'Triagem' }, { name: 'Triagem' }] }).success).toBe(true)
-    expect(stagesInput.safeParse({ stages: [{ name: 'Qualquer' }, { name: 'CADASTRO DO CANDIDATO' }] }).success).toBe(false)
+    expect(stagesInput.safeParse({ stages: [{ name: 'Triagem do currículo' }, { name: 'Triagem do currículo' }] }).success).toBe(true)
+    expect(stagesInput.safeParse({ stages: [{ name: 'Qualquer' }, { name: 'RECEPÇÃO DO CURRÍCULO' }] }).success).toBe(false)
   })
 
   const validApplication = {

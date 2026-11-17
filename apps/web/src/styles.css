@@ -252,7 +252,12 @@
   .pop[data-state='closed'] { animation: pop-out 120ms ease-in forwards; transform-origin: var(--radix-dropdown-menu-content-transform-origin, top); }
   .dialog[data-state='open'] { animation: dialog-in 320ms var(--ease-falcon); }
   .dialog[data-state='closed'] { animation: pop-out 140ms ease-in forwards; }
+
+  /* Barras de funil e ocupação: crescem da esquerda, em cascata. */
+  .funnel-bar { transform-origin: left; animation: grow-x 700ms var(--ease-falcon) both; }
 }
+
+@keyframes grow-x { from { transform: scaleX(0); } }
 
 @keyframes shimmer { to { background-position: -200% 0; } }
 @keyframes fade-in { from { opacity: 0; } }

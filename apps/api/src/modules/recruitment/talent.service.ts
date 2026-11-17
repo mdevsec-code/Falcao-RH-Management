@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm'
 
-import type { CandidateFilters } from '@falcao-rh/contracts'
+import type { CandidateFilters, ForeignCandidate } from '@falcao-rh/contracts'
 
 import type { Tx } from '../../db/client'
 import {
@@ -148,6 +148,7 @@ export const getCandidate = async (tx: Tx, id: string) => {
     cpf: candidate.cpf,
     linkedin: candidate.linkedin,
     tags: candidate.tags,
+    foreign: candidate.foreign,
     invitedAt: candidate.invitedAt,
     canInvite: rows.some(r => r.talentPoolConsent && r.retentionUntil !== null && r.retentionUntil >= today),
     applications: rows.map(row => ({ ...row, notes: notes.filter(n => n.applicationId === row.id) })),
@@ -161,6 +162,13 @@ export const updateCandidateTags = async (tx: Tx, ctx: Ctx, id: string, tags: st
   await tx.update(candidates).set({ tags: unique }).where(eq(candidates.id, id))
   await audit(tx, ctx, { action: 'candidate.tags_updated', entity: 'candidate', entityId: id })
   return { id, tags: unique }
+}
+
+export const updateCandidateForeign = async (tx: Tx, ctx: Ctx, id: string, foreign: ForeignCandidate | null) => {
+  await findCandidate(tx, id)
+  await tx.update(candidates).set({ foreign }).where(eq(candidates.id, id))
+  await audit(tx, ctx, { action: 'candidate.foreign_updated', entity: 'candidate', entityId: id })
+  return { id, foreign }
 }
 
 export const candidateDuplicates = async (tx: Tx, id: string) => {

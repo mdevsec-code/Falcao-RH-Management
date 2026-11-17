@@ -3,12 +3,14 @@ import { Copy, Download, FileClock, FileText, Mail, MapPin, Merge, Phone, Send, 
 import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
+import type { ForeignCandidate } from '@falcao-rh/contracts'
+
 import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
 import { Input, Select } from '../components/ui/field'
 import { Avatar, Badge, Skeleton } from '../components/ui/layout'
 import { api, ApiError, openDownload } from '../lib/api'
-import { displayCpf } from '../lib/format'
+import { displayCpf, formatDate } from '../lib/format'
 import { useCan } from '../lib/session'
 import type { CandidateDetail, CandidateDuplicate, JobListItem } from '../lib/types'
 
@@ -143,6 +145,8 @@ export function TalentDrawer({ id, onClose, onMerged }: { id: string | null; onC
             </div>
           )}
 
+          <ForeignSection candidate={c} canManage={canManage} onSaved={refresh} />
+
           <Section title="Etiquetas">
             <div className="flex flex-wrap items-center gap-1.5">
               {c.tags.map(tag => (
@@ -241,6 +245,94 @@ export function TalentDrawer({ id, onClose, onMerged }: { id: string | null; onC
         </div>
       )}
     </Drawer>
+  )
+}
+
+const EMPTY_FOREIGN: ForeignCandidate = { nationality: '', passport: '', rnm: '', visaType: '', visaExpiresAt: null, languages: '' }
+
+/** Estrangeiro: nacionalidade e documentos de migração que o RH confere antes de contratar. */
+function ForeignSection({ candidate, canManage, onSaved }: { candidate: CandidateDetail; canManage: boolean; onSaved: () => Promise<unknown> }) {
+  const [form, setForm] = useState<ForeignCandidate | null>(null)
+  const save = useMutation({
+    mutationFn: (foreign: ForeignCandidate | null) => api(`/candidates/${candidate.id}/foreign`, { method: 'PUT', body: { foreign } }),
+    onSuccess: async () => {
+      setForm(null)
+      await onSaved()
+      toast.success('Dados de estrangeiro salvos.')
+    },
+    onError: (error: unknown) => toast.error(error instanceof ApiError ? error.message : 'Não foi possível salvar.'),
+  })
+  const f = candidate.foreign
+  const expired = f?.visaExpiresAt && f.visaExpiresAt < new Date().toISOString().slice(0, 10)
+  const set = (key: keyof ForeignCandidate) => (e: { target: { value: string } }) =>
+    setForm(prev => ({ ...prev!, [key]: key === 'visaExpiresAt' ? e.target.value || null : e.target.value }))
+
+  if (form)
+    return (
+      <Section title="Candidato estrangeiro">
+        <form
+          className="grid gap-2 sm:grid-cols-2"
+          onSubmit={e => {
+            e.preventDefault()
+            save.mutate(form)
+          }}
+        >
+          <Input aria-label="Nacionalidade" placeholder="Nacionalidade *" required value={form.nationality} onChange={set('nationality')} />
+          <Input aria-label="Idiomas" placeholder="Idiomas" value={form.languages} onChange={set('languages')} />
+          <Input aria-label="Passaporte" placeholder="Passaporte" value={form.passport} onChange={set('passport')} />
+          <Input aria-label="RNM" placeholder="RNM" value={form.rnm} onChange={set('rnm')} />
+          <Input aria-label="Tipo de visto" placeholder="Tipo de visto" value={form.visaType} onChange={set('visaType')} />
+          <Input aria-label="Visto válido até" type="date" value={form.visaExpiresAt ?? ''} onChange={set('visaExpiresAt')} />
+          <span className="flex gap-2 sm:col-span-2">
+            <Button size="sm" variant="primary" type="submit" loading={save.isPending}>
+              Salvar
+            </Button>
+            <Button size="sm" onClick={() => setForm(null)}>
+              Cancelar
+            </Button>
+          </span>
+        </form>
+      </Section>
+    )
+
+  if (!f)
+    return canManage ? (
+      <button type="button" onClick={() => setForm(EMPTY_FOREIGN)} className="self-start text-[13.5px] font-medium text-steel underline underline-offset-2 hover:text-ink">
+        Marcar como candidato estrangeiro
+      </button>
+    ) : null
+
+  return (
+    <Section title="Candidato estrangeiro">
+      <div className="flex flex-col gap-1 text-[13.5px] text-ink-soft">
+        <p className="flex flex-wrap items-center gap-2">
+          <Badge tone="info">{f.nationality}</Badge>
+          {expired && <Badge tone="danger">Visto vencido</Badge>}
+        </p>
+        {[
+          ['Passaporte', f.passport],
+          ['RNM', f.rnm],
+          ['Visto', [f.visaType, f.visaExpiresAt && `válido até ${formatDate(f.visaExpiresAt)}`].filter(Boolean).join(', ')],
+          ['Idiomas', f.languages],
+        ]
+          .filter(([, value]) => value)
+          .map(([label, value]) => (
+            <p key={label}>
+              <span className="text-steel">{label}:</span> {value}
+            </p>
+          ))}
+        {canManage && (
+          <span className="mt-1 flex gap-3">
+            <button type="button" onClick={() => setForm(f)} className="font-medium underline underline-offset-2 hover:text-ink">
+              Editar
+            </button>
+            <button type="button" onClick={() => save.mutate(null)} className="text-steel underline underline-offset-2 hover:text-danger">
+              Não é estrangeiro
+            </button>
+          </span>
+        )}
+      </div>
+    </Section>
   )
 }
 

@@ -33,6 +33,8 @@ import { recruitmentStageRoutes } from './modules/recruitment/stages.routes'
 import { requestRoutes } from './modules/requests/requests.routes'
 import { settingsRoutes } from './modules/settings/settings.routes'
 import { transferRoutes } from './modules/employees/transfer.routes'
+import { transportRoutesPlugin } from './modules/transport/transport.routes'
+import { admissionPublicRoutes, admissionRoutes } from './modules/admission/admission.routes'
 import { userRoutes } from './modules/users/users.routes'
 
 import type { Scanner } from './lib/scanner'
@@ -118,6 +120,8 @@ export const buildApp = async (deps: AppDeps, options: FastifyServerOptions = {}
 
   // Página pública de vagas: sem sessão; a organização vem do endereço.
   await app.register(publicRecruitmentRoutes(deps), { prefix: '/api/public/v1' })
+  // Admissão digital: o novo colaborador entra só com o link (token).
+  await app.register(admissionPublicRoutes(deps), { prefix: '/api/public/v1' })
 
   // API de domínio: toda rota exige sessão e organização.
   await app.register(
@@ -137,6 +141,8 @@ export const buildApp = async (deps: AppDeps, options: FastifyServerOptions = {}
       await api.register(applicationRoutes(deps))
       await api.register(talentRoutes(deps))
       await api.register(careerPageRoutes(deps))
+      await api.register(transportRoutesPlugin(deps))
+      await api.register(admissionRoutes(deps))
     },
     { prefix: '/api/v1' },
   )

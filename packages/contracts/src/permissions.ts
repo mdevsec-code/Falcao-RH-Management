@@ -41,6 +41,8 @@ export const PERMISSIONS = [
   'recruitment.read',
   'recruitment.manage',
   'talent_pool.read',
+  'transport.read',
+  'transport.manage',
 ] as const
 export type Permission = (typeof PERMISSIONS)[number]
 
@@ -76,6 +78,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'recruitment.read',
     'recruitment.manage',
     'talent_pool.read',
+    'transport.read',
+    'transport.manage',
     ...SELF,
   ],
   manager: ['dashboard.view', 'org.read', 'employees.read', 'requests.read', 'requests.approve', 'recruitment.read', ...SELF],

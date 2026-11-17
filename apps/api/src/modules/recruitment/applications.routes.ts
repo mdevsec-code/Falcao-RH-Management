@@ -6,14 +6,23 @@ import { employeeInput, stageMove, uuid } from '@falcao-rh/contracts'
 import type { AppDeps } from '../../app'
 import { ctxOf, requirePermission, tenantTx } from '../../http/context'
 import { addNote, applicationDetail, board, candidateFileUrl, hireApplication, moveApplication, rateApplication } from './applications.service'
+import { recruitmentInsights } from './insights.service'
 
 const idParams = z.object({ id: uuid })
+const insightFilters = z.object({ from: z.iso.date().optional(), to: z.iso.date().optional(), jobId: uuid.optional() })
 
 /** Quadro de candidatos: RH e gestor (nas vagas em que é responsável) movem, avaliam e anotam. */
 export const applicationRoutes =
   ({ db, mailer, storage }: AppDeps): FastifyPluginAsyncZod =>
   async app => {
     const read = { preHandler: requirePermission('recruitment.read') }
+
+    // Visão executiva de toda a organização: só RH e administração.
+    app.get(
+      '/recruitment/insights',
+      { preHandler: requirePermission('recruitment.manage'), schema: { querystring: insightFilters } },
+      async request => tenantTx(db, ctxOf(request), tx => recruitmentInsights(tx, request.query)),
+    )
 
     app.get('/jobs/:id/applications', { ...read, schema: { params: idParams } }, async request => {
       const ctx = ctxOf(request)

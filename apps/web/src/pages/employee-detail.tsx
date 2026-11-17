@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
-import { ArrowLeft, ClipboardList, History, Info, Pencil, Upload, UserCog } from 'lucide-react'
+import { ArrowLeft, ClipboardList, Copy, History, Info, Link2, Pencil, Upload, UserCog } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { toast } from 'sonner'
 
@@ -17,7 +17,7 @@ import { DocumentDrawer, DocumentTable, UploadDocumentDrawer } from '../features
 import { ProfileDetails, ProfileHeader, ProfileHistory } from '../features/employee-profile'
 import { periodLabel, RequestDrawer, requestLabel, RequestStatusBadge, VacationBalanceCard } from '../features/requests'
 import { api, ApiError } from '../lib/api'
-import { statusLabel, todayIso } from '../lib/format'
+import { formatDate, statusLabel, todayIso } from '../lib/format'
 import { useCan } from '../lib/session'
 import type { DocumentItem, EmployeeDetail, EmployeeStatus, RequestItem, VacationBalance } from '../lib/types'
 
@@ -79,6 +79,7 @@ export function EmployeeDetailPage() {
             employee={employee}
             actions={
               <>
+                {canEdit && employee.status !== 'terminated' && <AdmissionLinkButton employeeId={id} />}
                 {canChangeStatus && (
                   <Button variant="glass" onClick={() => setChangingStatus(true)}>
                     <UserCog className="size-4" aria-hidden /> Alterar situação
@@ -158,6 +159,65 @@ const ACTION_LABELS: Record<EmployeeStatus, string> = {
   active: 'Reativar',
   on_leave: 'Registrar afastamento',
   terminated: 'Registrar desligamento',
+}
+
+/** Admissão digital: o RH gera o link e envia ao novo colaborador (WhatsApp, e-mail). */
+function AdmissionLinkButton({ employeeId }: { employeeId: string }) {
+  const [open, setOpen] = useState(false)
+  const [link, setLink] = useState<{ url: string; expiresAt: string } | null>(null)
+  const status = useQuery({
+    queryKey: ['admission-link', employeeId],
+    queryFn: () => api<{ expiresAt: string; submittedAt: string | null } | null>(`/employees/${employeeId}/admission-link`),
+    enabled: open,
+  })
+  const generate = useMutation({
+    mutationFn: () => api<{ path: string; expiresAt: string }>(`/employees/${employeeId}/admission-link`, { method: 'POST' }),
+    onSuccess: ({ path, expiresAt }) => {
+      setLink({ url: `${window.location.origin}${path}`, expiresAt })
+      void status.refetch()
+    },
+    onError: error => toast.error(error instanceof ApiError ? error.message : 'Não foi possível gerar o link.'),
+  })
+  const copy = async () => {
+    await navigator.clipboard.writeText(link!.url).catch(() => undefined)
+    toast.success('Link copiado. Envie ao colaborador.')
+  }
+  const last = status.data
+  return (
+    <>
+      <Button variant="glass" onClick={() => setOpen(true)}>
+        <Link2 className="size-4" aria-hidden /> Link de admissão
+      </Button>
+      <Drawer
+        open={open}
+        onOpenChange={value => {
+          setOpen(value)
+          if (!value) setLink(null)
+        }}
+        title="Admissão digital"
+        description="O colaborador confere os dados e envia os documentos pelo celular, sem login. O link vale 7 dias e só pode ser enviado uma vez."
+      >
+        <div className="flex flex-col gap-4 text-sm">
+          {last?.submittedAt && <p className="text-ok">Admissão enviada em {formatDate(last.submittedAt)}. Os documentos estão na aba Documentos.</p>}
+          {!last?.submittedAt && last && new Date(last.expiresAt) > new Date() && !link && (
+            <p className="text-steel">Há um link ativo até {formatDate(last.expiresAt)}. Gerar outro invalida o anterior.</p>
+          )}
+          {link ? (
+            <div className="flex gap-2">
+              <Input readOnly aria-label="Link de admissão" value={link.url} onFocus={e => e.target.select()} />
+              <Button onClick={copy} aria-label="Copiar link">
+                <Copy className="size-4" aria-hidden />
+              </Button>
+            </div>
+          ) : (
+            <Button variant="primary" className="self-start" loading={generate.isPending} onClick={() => generate.mutate()}>
+              Gerar link
+            </Button>
+          )}
+        </div>
+      </Drawer>
+    </>
+  )
 }
 
 function StatusDrawer({

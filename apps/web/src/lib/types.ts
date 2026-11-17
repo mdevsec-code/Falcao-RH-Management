@@ -3,6 +3,7 @@
  * divergirem, o teste de tipos do build acusa no uso.
  * TODO(ROADMAP): gerar a partir de esquemas de resposta em @falcao-rh/contracts.
  */
+import type { ForeignCandidate } from '@falcao-rh/contracts'
 import type {
   AbsenceKind,
   ApproverKind,
@@ -339,6 +340,7 @@ export type CandidateDetail = {
   cpf: string | null
   linkedin: string | null
   tags: string[]
+  foreign: ForeignCandidate | null
   invitedAt: string | null
   canInvite: boolean
   applications: {

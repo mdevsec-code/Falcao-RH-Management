@@ -150,7 +150,7 @@ describe('candidatura pública', () => {
     expect(application!.retentionUntil).not.toBeNull()
 
     const [event] = await t.db.select().from(applicationEvents).where(eq(applicationEvents.applicationId, application!.id))
-    expect(event).toMatchObject({ toLabel: 'Cadastro do candidato', actorUserId: null, fromStageId: null })
+    expect(event).toMatchObject({ toLabel: 'Recepção do currículo', actorUserId: null, fromStageId: null })
 
     const [file] = await t.db.select().from(candidateFiles).where(eq(candidateFiles.applicationId, application!.id))
     expect(file).toMatchObject({ scanStatus: 'pending', filename: 'curriculo.pdf' })

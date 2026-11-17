@@ -130,6 +130,13 @@ const recruitmentRoute = createRoute({
   component: lazyRouteComponent(() => import('./pages/recruitment'), 'RecruitmentPage'),
 })
 
+const recruitmentInsightsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/recrutamento/painel',
+  beforeLoad: guard('recruitment.manage'),
+  component: lazyRouteComponent(() => import('./pages/recruitment-insights'), 'RecruitmentInsightsPage'),
+})
+
 const jobBoardRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/recrutamento/vagas/$id',
@@ -149,6 +156,21 @@ const talentPoolRoute = createRoute({
   path: '/talentos',
   beforeLoad: guard('talent_pool.read'),
   component: lazyRouteComponent(() => import('./pages/talent-pool'), 'TalentPoolPage'),
+})
+
+/** Admissão digital: pública, o novo colaborador entra só com o link. */
+const admissionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/admissao/$token',
+  component: lazyRouteComponent(() => import('./pages/admission'), 'AdmissionPage'),
+})
+
+const mobilityRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/mobilidade',
+  validateSearch: z.object({ tab: z.enum(['visao', 'colaboradores', 'fretado', 'qualidade', 'atualizar']).optional() }),
+  beforeLoad: guard('transport.read'),
+  component: lazyRouteComponent(() => import('./pages/mobility'), 'MobilityPage'),
 })
 
 const structureRoute = createRoute({
@@ -215,6 +237,7 @@ const routeTree = rootRoute.addChildren([
   candidatePrivacyRoute,
   setPasswordRoute,
   admissionDocumentsRoute,
+  admissionRoute,
   appRoute.addChildren([
     indexRoute,
     dashboardRoute,
@@ -224,6 +247,8 @@ const routeTree = rootRoute.addChildren([
     recruitmentRoute,
     careersEditorRoute,
     talentPoolRoute,
+    mobilityRoute,
+    recruitmentInsightsRoute,
     jobBoardRoute,
     portalRoute,
     accessRoute,

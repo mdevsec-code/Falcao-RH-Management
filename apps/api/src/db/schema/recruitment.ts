@@ -28,6 +28,7 @@ import {
   JOB_VISIBILITIES,
   QUESTION_KINDS,
   WORK_MODES,
+  type ForeignCandidate,
 } from '@falcao-rh/contracts'
 
 import { user } from './auth'
@@ -52,7 +53,7 @@ export const fileScanStatusEnum = pgEnum('file_scan_status', ['pending', 'clean'
 // ---------- etapas do processo seletivo ----------
 
 /**
- * Etapas do quadro, por organização (spec 5.8). A inicial (Cadastro do candidato) é fixa e
+ * Etapas do quadro, por organização (spec 5.8). A inicial (Recepção do currículo) é fixa e
  * fica na posição 0. `(tenant_id, position)` é única e adiável (reordenar
  * troca posições), na migração 0007.
  */
@@ -148,6 +149,8 @@ export const candidates = pgTable(
     cpf: text('cpf'),
     linkedin: text('linkedin'),
     tags: text('tags').array().default([]).notNull(),
+    /** Estrangeiro: nacionalidade, passaporte, RNM e visto. */
+    foreign: jsonb('foreign_data').$type<ForeignCandidate>(),
     invitedAt: timestamp('invited_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

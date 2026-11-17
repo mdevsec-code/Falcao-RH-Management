@@ -83,7 +83,7 @@ describe('etapas do recrutamento', () => {
     const response = await putStages(a.users.hr!.cookie, [inicial!, entrevista!, triagem!, { name: 'Exame admissional (ASO)' }, ...rest])
     expect(response.statusCode).toBe(200)
     const after = response.json<Stage[]>()
-    expect(after.map(s => s.name)).toEqual([DEFAULT_STAGES[0], 'Entrevista/agendamento', 'Triagem', 'Exame admissional (ASO)', ...DEFAULT_STAGES.slice(3)])
+    expect(after.map(s => s.name)).toEqual([DEFAULT_STAGES[0], 'Contatar o candidato', 'Triagem do currículo', 'Exame admissional (ASO)', ...DEFAULT_STAGES.slice(3)])
     expect(after.map(s => s.position)).toEqual(after.map((_, i) => i))
     expect(after[1]!.id).toBe(entrevista!.id)
     expect(after[2]!.id).toBe(triagem!.id)
@@ -100,15 +100,15 @@ describe('etapas do recrutamento', () => {
 
   it('renomeia uma etapa', async () => {
     const stages = await getStages(a.users.hr!.cookie)
-    const renamed = stages.map(s => (s.name === 'Triagem' ? { id: s.id, name: 'Triagem de currículos' } : s))
+    const renamed = stages.map(s => (s.name === 'Triagem do currículo' ? { id: s.id, name: 'Triagem de currículos' } : s))
     const response = await putStages(a.users.hr!.cookie, renamed)
     expect(response.statusCode).toBe(200)
-    expect(byName(response.json<Stage[]>(), 'Triagem de currículos').id).toBe(byName(stages, 'Triagem').id)
+    expect(byName(response.json<Stage[]>(), 'Triagem de currículos').id).toBe(byName(stages, 'Triagem do currículo').id)
   })
 
   it('nome repetido → 400', async () => {
     const stages = await getStages(a.users.hr!.cookie)
-    const response = await putStages(a.users.hr!.cookie, [...stages, { name: ' admissão ' }])
+    const response = await putStages(a.users.hr!.cookie, [...stages, { name: ' contratação ' }])
     expect(response.statusCode).toBe(400)
   })
 
@@ -117,7 +117,7 @@ describe('etapas do recrutamento', () => {
     const response = await putStages(a.users.hr!.cookie, [{ id: stages[0]!.id, name: 'Recebidos' }, ...stages.slice(1)])
     expect(response.statusCode).toBe(200)
     const [first] = response.json<Stage[]>()
-    expect(first).toMatchObject({ id: stages[0]!.id, name: 'Cadastro do candidato', position: 0, isInitial: true })
+    expect(first).toMatchObject({ id: stages[0]!.id, name: 'Recepção do currículo', position: 0, isInitial: true })
   })
 
   it('a etapa inicial não sai da primeira posição', async () => {
@@ -128,23 +128,23 @@ describe('etapas do recrutamento', () => {
 
   it('remover etapa com candidatura em andamento → 409', async () => {
     const stages = await getStages(a.users.hr!.cookie)
-    const proposta = byName(stages, 'Teste prático')
+    const proposta = byName(stages, 'Agendar entrevista')
     await insertApplication(a.tenant.id, proposta.id)
-    expect(byName(await getStages(a.users.hr!.cookie), 'Teste prático').openApplications).toBe(1)
+    expect(byName(await getStages(a.users.hr!.cookie), 'Agendar entrevista').openApplications).toBe(1)
 
     const response = await putStages(
       a.users.hr!.cookie,
       stages.filter(s => s.id !== proposta.id),
     )
     expect(response.statusCode).toBe(409)
-    expect(response.json().message).toBe('Mova os candidatos antes de remover a etapa Teste prático.')
-    expect((await getStages(a.users.hr!.cookie)).map(s => s.name)).toContain('Teste prático')
+    expect(response.json().message).toBe('Mova os candidatos antes de remover a etapa Agendar entrevista.')
+    expect((await getStages(a.users.hr!.cookie)).map(s => s.name)).toContain('Agendar entrevista')
   })
 
   it('remove etapa vazia, e a que só tem candidaturas encerradas, preservando o histórico', async () => {
     const stages = await getStages(a.users.hr!.cookie)
     const aso = byName(stages, 'Exame admissional (ASO)')
-    const entrevista = byName(stages, 'Entrevista/agendamento')
+    const entrevista = byName(stages, 'Contatar o candidato')
     // Candidatura recusada que estava na Entrevista, com o evento da mudança.
     const application = await insertApplication(a.tenant.id, entrevista.id, 'rejected')
     await t.db.execute(sql`
@@ -169,7 +169,7 @@ describe('etapas do recrutamento', () => {
       await t.db.execute(sql`
         select from_stage_id, from_label, to_stage_id, to_label from application_events where application_id = ${application}`),
     )
-    expect(event).toEqual({ from_stage_id: stages[0]!.id, from_label: 'Cadastro do candidato', to_stage_id: null, to_label: 'Entrevista/agendamento' })
+    expect(event).toEqual({ from_stage_id: stages[0]!.id, from_label: 'Recepção do currículo', to_stage_id: null, to_label: 'Contatar o candidato' })
   })
 
   it('isolamento: a empresa A não lê nem usa as etapas da B', async () => {
@@ -339,7 +339,7 @@ describe('migração das etapas de contratação (0009)', () => {
       const stages = rowsOf<{ id: string; name: string; position: number; is_initial: boolean }>(
         await db.execute(sql`select id, name, position, is_initial from recruitment_stages where tenant_id = ${tenant} order by position`),
       )
-      expect(stages.map(s => s.name)).toEqual([...DEFAULT_STAGES, 'Integração'])
+      expect(stages.map(s => s.name)).toEqual(['Cadastro do candidato', 'Triagem', 'Entrevista/agendamento', 'Teste prático', 'Pesquisa de referência', 'Exame admissional', 'Solicitação de documentos', 'Resultados da seleção', 'Admissão', 'Integração'])
       expect(stages.map(s => s.position)).toEqual(stages.map((_, i) => i))
       expect(stages[0]).toMatchObject({ id: old.Novo, is_initial: true })
       const byNewName = Object.fromEntries(stages.map(s => [s.name, s.id]))

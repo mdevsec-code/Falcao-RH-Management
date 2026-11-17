@@ -1,12 +1,12 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
-import { candidateFilters, candidateInvite, candidateMerge, candidateUpdate, uuid } from '@falcao-rh/contracts'
+import { candidateFilters, candidateForeignUpdate, candidateInvite, candidateMerge, candidateUpdate, uuid } from '@falcao-rh/contracts'
 
 import type { AppDeps } from '../../app'
 import { ctxOf, requirePermission, tenantTx } from '../../http/context'
 import { AppError } from '../../lib/errors'
-import { candidateDuplicates, getCandidate, inviteCandidate, listCandidates, mergeCandidates, updateCandidateTags } from './talent.service'
+import { candidateDuplicates, getCandidate, inviteCandidate, listCandidates, mergeCandidates, updateCandidateForeign, updateCandidateTags } from './talent.service'
 
 const idParams = z.object({ id: uuid })
 
@@ -35,6 +35,11 @@ export const talentRoutes =
     app.patch('/candidates/:id', { ...manage, schema: { params: idParams, body: candidateUpdate } }, async request => {
       const ctx = ctxOf(request)
       return tenantTx(db, ctx, tx => updateCandidateTags(tx, ctx, request.params.id, request.body.tags))
+    })
+
+    app.put('/candidates/:id/foreign', { ...manage, schema: { params: idParams, body: candidateForeignUpdate } }, async request => {
+      const ctx = ctxOf(request)
+      return tenantTx(db, ctx, tx => updateCandidateForeign(tx, ctx, request.params.id, request.body.foreign))
     })
 
     app.post('/candidates/:id/merge', { ...manage, schema: { params: idParams, body: candidateMerge } }, async request => {
