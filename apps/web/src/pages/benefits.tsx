@@ -619,7 +619,8 @@ function PlanDrawer({ plan, onClose }: { plan: Plan | null; onClose: () => void 
   const [form, setForm] = useState({
     kind: plan?.kind ?? 'vr',
     name: plan?.name ?? '',
-    provider: plan?.provider ?? '',
+    // A Falcão usa o Caju para alimentação, refeição e mobilidade.
+    provider: plan?.provider ?? 'Caju',
     valueType: plan?.valueType ?? 'daily',
     active: plan?.active ?? true,
     value: '',
@@ -689,7 +690,7 @@ function PlanDrawer({ plan, onClose }: { plan: Plan | null; onClose: () => void 
           {props => <Input {...props} required minLength={2} placeholder="Ex.: VR obra" value={form.name} onChange={set('name')} />}
         </Field>
         <Field label="Fornecedor" className="sm:col-span-2">
-          {props => <Input {...props} placeholder="Operadora do cartão" value={form.provider} onChange={set('provider')} />}
+          {props => <Input {...props} placeholder="Caju" value={form.provider} onChange={set('provider')} />}
         </Field>
         {!plan && (
           <>

@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   Copy,
   Download,
-  FileSpreadsheet,
   Gauge,
   MapPin,
   PauseCircle,
@@ -16,28 +15,27 @@ import {
   Search,
   Smartphone,
   Trash2,
-  Upload,
   Users,
   Wallet,
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { useMemo, useState, type ReactNode } from 'react'
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import { toast } from 'sonner'
 
 import { TRANSPORT_MODE_LABELS, TRANSPORT_MODES, type TransportMode } from '@falcao-rh/contracts'
 
-import { CountUp } from '../components/motion'
+import { CountUp, Ring, SpotlightGlow, useIndicator, useSpotlight, useTilt } from '../components/motion'
 import { Button } from '../components/ui/button'
 import { DataTable } from '../components/ui/data-table'
 import { Drawer } from '../components/ui/drawer'
 import { Field, Input, Select, Textarea } from '../components/ui/field'
-import { FileInput } from '../components/ui/file-input'
 import { Badge, EmptyState, ErrorState, PageHeader, Panel, Skeleton } from '../components/ui/layout'
-import { api, ApiError, apiDownload, apiUpload } from '../lib/api'
+import { api, ApiError, apiDownload } from '../lib/api'
 import { cn } from '../lib/cn'
 import { formatNumber, statusLabel, statusTone } from '../lib/format'
+import { gsap, reducedMotion, useGSAP } from '../lib/gsap'
 import { useCan } from '../lib/session'
 import type { EmployeeStatus } from '../lib/types'
 
@@ -72,7 +70,7 @@ type Route = {
   riders: number
 }
 
-type Tab = 'visao' | 'colaboradores' | 'mobilidade' | 'fretado' | 'cidades' | 'indicadores' | 'qualidade' | 'atualizar'
+type Tab = 'visao' | 'colaboradores' | 'mobilidade' | 'fretado' | 'cidades' | 'indicadores' | 'qualidade'
 const TABS: { key: Tab; label: string }[] = [
   { key: 'visao', label: 'Visão geral' },
   { key: 'colaboradores', label: 'Colaboradores' },
@@ -81,7 +79,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'cidades', label: 'Cidades' },
   { key: 'indicadores', label: 'Indicadores' },
   { key: 'qualidade', label: 'Qualidade dos dados' },
-  { key: 'atualizar', label: 'Atualizar dados' },
 ]
 
 const MODE_COLORS: Record<TransportMode | 'unset', string> = {
@@ -117,12 +114,15 @@ const NO_FILTERS: Filters = { q: '', department: '', city: '', mode: '', status:
 export function MobilityPage() {
   const search = useSearch({ strict: false }) as { tab?: Tab }
   const navigate = useNavigate()
-  const tab = search.tab ?? 'visao'
+  // Aba que não existe mais (ex.: link antigo de "Atualizar dados") cai na visão geral.
+  const tab: Tab = TABS.some(t => t.key === search.tab) ? search.tab! : 'visao'
   const manage = useCan('transport.manage')
   const board = useQuery(boardQuery)
   const routes = useQuery(routesQuery)
   const [editing, setEditing] = useState<BoardRow | null>(null)
   const [filters, setFilters] = useState<Filters>(NO_FILTERS)
+  const tabsRef = useRef<HTMLElement>(null)
+  useIndicator(tabsRef, tab)
 
   // Mesmo nome mais de uma vez no cadastro: provável duplicidade.
   const all = useMemo<Row[]>(() => {
@@ -163,24 +163,24 @@ export function MobilityPage() {
         }
       />
 
-      <nav className="-mx-4 mb-4 flex gap-1 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0" aria-label="Seções de mobilidade">
-        {TABS.filter(t => t.key !== 'atualizar' || manage).map(t => (
+      <nav ref={tabsRef} className="relative -mx-4 mb-4 flex gap-1 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0" aria-label="Seções de mobilidade">
+        {/* Sublinhado que desliza até a aba ativa. */}
+        <span data-indicator className="pointer-events-none absolute border-b-2 border-ink" aria-hidden />
+        {TABS.map(t => (
           <button
             key={t.key}
             type="button"
             onClick={() => void navigate({ to: '/mobilidade', search: { tab: t.key } })}
             aria-current={tab === t.key ? 'page' : undefined}
-            className={cn(
-              '-mb-px border-b-2 px-3.5 py-2.5 text-[14.5px] whitespace-nowrap transition-colors',
-              tab === t.key ? 'border-ink font-semibold text-ink' : 'border-transparent text-steel hover:text-ink',
-            )}
+            data-active={tab === t.key}
+            className={cn('px-3.5 py-2.5 text-[14.5px] whitespace-nowrap transition-colors', tab === t.key ? 'font-semibold text-ink' : 'text-steel hover:text-ink')}
           >
             {t.label}
           </button>
         ))}
       </nav>
 
-      {tab !== 'atualizar' && <FilterBar all={all} filters={filters} onChange={setFilters} shown={rows.length} />}
+      <FilterBar all={all} filters={filters} onChange={setFilters} shown={rows.length} />
 
       {(board.isError || routes.isError) && <ErrorState error={board.error ?? routes.error} onRetry={() => void board.refetch()} />}
       {board.isPending || routes.isPending ? (
@@ -188,20 +188,19 @@ export function MobilityPage() {
           <Skeleton className="h-40" />
           <Skeleton className="h-80" />
         </div>
-      ) : all.length === 0 && tab !== 'atualizar' ? (
+      ) : all.length === 0 ? (
         <EmptyState icon={Bus} title="Nenhum colaborador ativo">
           Cadastre colaboradores para acompanhar a mobilidade.
         </EmptyState>
       ) : (
         <>
-          {tab === 'visao' && <Overview rows={rows} routes={routes.data ?? []} filtered={filtered} />}
+          {tab === 'visao' && <Overview rows={rows} routes={routes.data ?? []} filtered={filtered} onPickCity={city => setFilters(f => ({ ...f, city }))} />}
           {tab === 'colaboradores' && <People rows={rows} onEdit={manage ? setEditing : undefined} />}
           {tab === 'mobilidade' && <MobilityList rows={rows} onEdit={manage ? setEditing : undefined} />}
           {tab === 'fretado' && <Chartered rows={rows} routes={routes.data ?? []} onEdit={manage ? setEditing : undefined} />}
           {tab === 'cidades' && <Cities rows={rows} onPick={city => setFilters(f => ({ ...f, city }))} />}
           {tab === 'indicadores' && <Indicators rows={rows} />}
           {tab === 'qualidade' && <Quality rows={rows} routes={routes.data ?? []} onEdit={manage ? setEditing : undefined} />}
-          {tab === 'atualizar' && manage && <ImportPanel />}
         </>
       )}
 
@@ -272,76 +271,136 @@ const TONES = {
   danger: 'bg-danger-soft text-danger',
 } as const
 
-function KpiCard({ icon: Icon, tone, label, value, note }: { icon: LucideIcon; tone: keyof typeof TONES; label: string; value: ReactNode; note: string }) {
+/** Grade de cartões com a luz que segue o mouse. */
+function SpotlightGrid({ className, children }: { className: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useSpotlight(ref)
   return (
-    <div className="flex flex-col gap-1.5 rounded-xl border border-line bg-paper p-4 transition-[box-shadow,transform] duration-200 hover:-translate-y-px hover:shadow-md">
-      <span className={cn('mb-1 flex size-8 items-center justify-center rounded-lg', TONES[tone])}>
-        <Icon className="size-4" aria-hidden />
-      </span>
-      <span className="text-[12.5px] font-medium text-steel">{label}</span>
-      <span className="num font-display text-[30px] leading-none font-semibold text-ink">{value}</span>
-      <span className="text-[12px] text-steel-soft">{note}</span>
+    <div ref={ref} className={className}>
+      {children}
     </div>
   )
 }
 
-/** Barras horizontais com rótulo, trilho e valor. */
-function HBars({ data, color = 'var(--color-ink)', empty = 'Sem dados neste recorte.' }: { data: { label: string; value: number }[]; color?: string; empty?: string }) {
-  if (!data.length) return <p className="text-sm text-steel">{empty}</p>
-  const max = Math.max(...data.map(d => d.value), 1)
+/** Uma linha do painel de detalhes: rótulo, valor e, se houver, a fatia numa barrinha. */
+type Detail = { label: string; value: ReactNode; share?: number; color?: string; tone?: 'danger' | 'ok' }
+type Details = { title: string; rows: Detail[]; hint?: string }
+
+/**
+ * Painel que aparece ao passar o mouse (ou ao focar com o teclado) logo abaixo
+ * do bloco, com o detalhamento do número.
+ */
+function Hoverable({ details, className, children }: { details?: Details; className?: string; children: ReactNode }) {
+  if (!details) return <div className={className}>{children}</div>
   return (
-    <ul className="flex flex-col gap-2.5">
-      {data.map((d, i) => (
-        <li key={d.label} className="grid grid-cols-[minmax(0,9.5rem)_1fr_3rem] items-center gap-3 text-[13px]">
-          <span className="truncate text-ink-soft" title={d.label}>
-            {d.label}
-          </span>
-          <span className="h-5 overflow-hidden rounded-md bg-sunken">
-            <span className="funnel-bar block h-full rounded-md" style={{ width: `${(d.value / max) * 100}%`, background: color, animationDelay: `${i * 40}ms` }} />
-          </span>
-          <span className="num text-right font-semibold text-ink">{formatNumber(d.value)}</span>
-        </li>
-      ))}
-    </ul>
+    <div className={cn('group/hv relative focus-within:z-40 hover:z-40', className)}>
+      {children}
+      <div
+        role="tooltip"
+        className="pointer-events-none invisible absolute inset-x-0 top-full z-40 mt-2 translate-y-1.5 opacity-0 transition-[opacity,transform,visibility] duration-200 ease-out group-focus-within/hv:visible group-focus-within/hv:translate-y-0 group-focus-within/hv:opacity-100 group-hover/hv:visible group-hover/hv:translate-y-0 group-hover/hv:opacity-100"
+      >
+        <div className="min-w-56 rounded-lg border border-line bg-paper p-3.5 text-[12.5px] shadow-pop">
+          <p className="mb-2 text-[11px] font-semibold tracking-[0.12em] text-steel uppercase">{details.title}</p>
+          {details.rows.length === 0 ? (
+            <p className="text-steel">Nada para detalhar neste recorte.</p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {details.rows.map(d => (
+                <li key={d.label}>
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-1.5 text-ink-soft">
+                      {d.color && <span className="size-2 shrink-0 rounded-sm" style={{ background: d.color }} aria-hidden />}
+                      <span className="truncate">{d.label}</span>
+                    </span>
+                    <span className={cn('num shrink-0 font-semibold', d.tone === 'danger' ? 'text-danger' : d.tone === 'ok' ? 'text-ok' : 'text-ink')}>{d.value}</span>
+                  </span>
+                  {d.share !== undefined && (
+                    <span className="mt-1 block h-1 overflow-hidden rounded-full bg-sunken">
+                      <span className="block h-full rounded-full transition-[width] duration-700" style={{ width: `${Math.min(100, d.share * 100)}%`, background: d.color ?? 'var(--color-ink)' }} />
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {details.hint && <p className="mt-2.5 border-t border-line pt-2 text-[11.5px] leading-snug text-steel">{details.hint}</p>}
+        </div>
+      </div>
+    </div>
   )
 }
 
-/** Rosca com o total no centro e a legenda com participação. */
-function Donut({ data }: { data: { label: string; value: number; color: string }[] }) {
-  const items = data.filter(d => d.value > 0)
-  const total = items.reduce((s, d) => s + d.value, 0)
-  if (!total) return <p className="text-sm text-steel">Sem dados neste recorte.</p>
+/** Linhas por tipo de transporte (com fatia e cor), para os detalhes. */
+const modeRows = (rows: Row[], value: (list: Row[]) => ReactNode = list => formatNumber(list.length)): Detail[] =>
+  MODE_KEYS.map(m => ({ m, list: rows.filter(r => modeKey(r) === m) }))
+    .filter(x => x.list.length)
+    .map(({ m, list }) => ({ label: modeLabel(m === 'unset' ? null : m), value: value(list), share: rows.length ? list.length / rows.length : 0, color: MODE_COLORS[m] }))
+
+/** Top N de uma contagem como linhas de detalhe. */
+const topRows = (data: { label: string; value: number }[], total: number, n = 5, color = 'var(--color-ink)'): Detail[] =>
+  data.slice(0, n).map(d => ({ label: d.label, value: `${formatNumber(d.value)} · ${pct(d.value, total)}`, share: total ? d.value / total : 0, color }))
+
+const sumCost = (list: Row[]) => list.reduce((s, r) => s + (r.monthlyCostCents ?? 0), 0)
+
+/** Custo de cada tipo de transporte (× meses), com a fatia do custo total. */
+const costRows = (rows: Row[], months = 1): Detail[] => {
+  const total = sumCost(rows)
+  return MODE_KEYS.map(m => ({ m, cost: sumCost(rows.filter(r => modeKey(r) === m)) }))
+    .filter(x => x.cost > 0)
+    .map(({ m, cost }) => ({ label: modeLabel(m === 'unset' ? null : m), value: money(cost * months), share: cost / total, color: MODE_COLORS[m] }))
+}
+
+function KpiCard({
+  icon: Icon,
+  tone,
+  label,
+  value,
+  note,
+  aside,
+  details,
+}: {
+  icon: LucideIcon
+  tone: keyof typeof TONES
+  label: string
+  value: ReactNode
+  note: ReactNode
+  aside?: ReactNode
+  details?: Details
+}) {
   return (
-    <div className="flex flex-wrap items-center gap-6">
-      <div className="relative size-44 shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie data={items} dataKey="value" nameKey="label" innerRadius="66%" outerRadius="100%" paddingAngle={1.5} stroke="var(--color-paper)" startAngle={90} endAngle={-270}>
-              {items.map(d => (
-                <Cell key={d.label} fill={d.color} />
-              ))}
-            </Pie>
-            <Tooltip contentStyle={{ borderRadius: 8, borderColor: 'var(--color-line)', fontSize: 13 }} />
-          </PieChart>
-        </ResponsiveContainer>
-        <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="num font-display text-[28px] leading-none font-semibold text-ink">{formatNumber(total)}</span>
-          <span className="text-[11.5px] text-steel">total</span>
+    <Hoverable details={details} className="flex">
+    <div
+      data-reveal
+      data-spotlight
+      tabIndex={details ? 0 : undefined}
+      className="surface group relative flex flex-1 flex-col justify-between gap-5 overflow-hidden p-5 outline-none transition-[box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-lift focus-visible:ring-2 focus-visible:ring-brand"
+    >
+      <SpotlightGlow />
+      <div className="relative flex items-start justify-between gap-3">
+        <span className="text-[13px] font-medium text-steel">{label}</span>
+        <span className={cn('flex size-9 items-center justify-center rounded-sm transition-transform duration-500 group-hover:-rotate-6 group-hover:scale-110', TONES[tone])}>
+          <Icon className="size-[17px]" aria-hidden />
         </span>
       </div>
-      <ul className="flex flex-col gap-2 text-[13px]">
-        {items.map(d => (
-          <li key={d.label} className="flex items-center gap-2">
-            <span className="size-2.5 rounded-sm" style={{ background: d.color }} aria-hidden />
-            <span className="num font-semibold text-ink">{formatNumber(d.value)}</span>
-            <span className="text-ink-soft">{d.label}</span>
-            <span className="text-steel-soft">({pct(d.value, total)})</span>
-          </li>
-        ))}
-      </ul>
+      <div className="relative flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <span className="num block font-display text-[40px] leading-[0.9] font-semibold tracking-[-0.01em] text-ink">{value}</span>
+          <span className="mt-2 block text-[12px] leading-snug text-steel">{note}</span>
+        </div>
+        {aside}
+      </div>
     </div>
+    </Hoverable>
   )
 }
+
+const moneyFormat = (cents: number) => money(Math.round(cents))
+/** Custo médio por pessoa de um tipo de transporte, só entre quem tem valor informado. */
+const avgCost = (rows: Row[], mode: TransportMode) => {
+  const paying = rows.filter(r => r.mode === mode && r.monthlyCostCents !== null)
+  return paying.length ? paying.reduce((s, r) => s + r.monthlyCostCents!, 0) / paying.length : null
+}
+const percentFormat = (n: number) => `${Math.round(n)}%`
 
 const modeSlices = (rows: Row[], includeUnset = true) =>
   [...TRANSPORT_MODES, ...(includeUnset ? (['unset'] as const) : [])].map(m => ({
@@ -352,43 +411,108 @@ const modeSlices = (rows: Row[], includeUnset = true) =>
 
 // ---------- visão geral ----------
 
-function Overview({ rows, routes, filtered }: { rows: Row[]; routes: Route[]; filtered: boolean }) {
+function Overview({ rows, routes, filtered, onPickCity }: { rows: Row[]; routes: Route[]; filtered: boolean; onPickCity: (city: string) => void }) {
   const total = rows.length
   const count = (mode: TransportMode | null) => rows.filter(r => r.mode === mode).length
   const cost = rows.reduce((s, r) => s + (r.monthlyCostCents ?? 0), 0)
   const capacity = routes.reduce((s, r) => s + (r.capacity ?? 0), 0)
   const riders = routes.reduce((s, r) => s + r.riders, 0)
-  const cities = new Set(rows.map(r => r.city).filter(Boolean)).size
-  const kpis: Parameters<typeof KpiCard>[0][] = [
-    { icon: Users, tone: 'ink', label: 'Total de colaboradores', value: <CountUp value={total} />, note: filtered ? 'No recorte filtrado' : 'Trabalhando e afastados' },
-    { icon: Smartphone, tone: 'brand', label: 'Mobilidade', value: <CountUp value={count('mobility')} />, note: `${pct(count('mobility'), total)} da base` },
-    { icon: Bus, tone: 'ink', label: 'Fretado', value: <CountUp value={count('chartered')} />, note: `${pct(count('chartered'), total)} da base` },
-    { icon: AlertTriangle, tone: 'danger', label: 'Sem transporte definido', value: <CountUp value={count(null)} />, note: 'Pendente de cadastro' },
-    { icon: PauseCircle, tone: 'warn', label: 'Afastados', value: <CountUp value={rows.filter(r => r.status === 'on_leave').length} />, note: 'Situação na ficha' },
-    { icon: MapPin, tone: 'ok', label: 'Cidades atendidas', value: <CountUp value={cities} />, note: 'Municípios distintos' },
-    { icon: Wallet, tone: 'info', label: 'Custo mensal', value: <span className="text-[24px]">{money(cost)}</span>, note: 'Mobilidade e fretado' },
-    { icon: Gauge, tone: riders > capacity ? 'danger' : 'ok', label: 'Ocupação do fretado', value: capacity ? pct(riders, capacity) : '—', note: `${riders} de ${capacity} lugares` },
-    { icon: Copy, tone: 'danger', label: 'Cadastros duplicados', value: <CountUp value={rows.filter(r => r.duplicate).length} />, note: 'Mesmo nome repetido' },
-    { icon: MapPin, tone: 'warn', label: 'Sem cidade', value: <CountUp value={rows.filter(r => !r.city).length} />, note: 'Endereço ou ponto ausente' },
-  ]
+  const idle = Math.max(0, capacity - riders)
+  const full = routes.filter(r => r.capacity && r.riders > r.capacity).length
+  const onLeave = rows.filter(r => r.status === 'on_leave').length
+  const avgChartered = avgCost(rows, 'chartered')
+  const avgMobility = avgCost(rows, 'mobility')
+  const gap = avgChartered !== null && avgMobility !== null ? avgChartered - avgMobility : null
+  const idleRiders = rows.filter(r => r.status === 'on_leave' && (r.mode === 'chartered' || r.mode === 'mobility'))
+  const idleCost = idleRiders.reduce((s, r) => s + (r.monthlyCostCents ?? 0), 0)
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-        {kpis.map(k => (
-          <KpiCard key={k.label} {...k} />
-        ))}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <CoverageHero rows={rows} filtered={filtered} />
+        <SpotlightGrid className="grid gap-4 sm:grid-cols-2">
+          <KpiCard
+            icon={Wallet}
+            tone="info"
+            label="Custo anual projetado"
+            value={<CountUp value={cost * 12} format={moneyFormat} />}
+            note={`${money(cost)}/mês · ${total ? money(Math.round(cost / total)) : '—'} por colaborador da base`}
+            details={{
+              title: 'Custo por tipo, por ano',
+              rows: costRows(rows, 12),
+              hint: 'Projeção: custo mensal informado × 12. Pessoas sem valor não entram.',
+            }}
+          />
+          <KpiCard
+            icon={Bus}
+            tone={gap !== null && gap > 0 ? 'ok' : 'warn'}
+            label="Fretado × mobilidade"
+            value={gap === null ? '—' : <CountUp value={Math.abs(gap)} format={moneyFormat} />}
+            note={
+              gap === null
+                ? 'Falta custo de um dos dois para comparar'
+                : `A mobilidade sai ${gap > 0 ? 'mais barata' : 'mais cara'} por pessoa/mês (${money(Math.round(avgChartered!))} × ${money(Math.round(avgMobility!))})`
+            }
+            details={{
+              title: 'Custo médio por pessoa/mês',
+              rows: [
+                { label: 'Fretado', value: avgChartered === null ? '—' : money(Math.round(avgChartered)), color: MODE_COLORS.chartered, share: avgChartered && avgMobility ? avgChartered / Math.max(avgChartered, avgMobility) : 0 },
+                { label: 'Mobilidade', value: avgMobility === null ? '—' : money(Math.round(avgMobility)), color: MODE_COLORS.mobility, share: avgChartered && avgMobility ? avgMobility / Math.max(avgChartered, avgMobility) : 0 },
+                ...(gap !== null ? [{ label: 'Diferença por ano, por pessoa', value: money(Math.round(Math.abs(gap) * 12)), tone: gap > 0 ? ('ok' as const) : ('danger' as const) }] : []),
+              ],
+              hint: 'Só entram pessoas com custo mensal informado.',
+            }}
+          />
+          <KpiCard
+            icon={Gauge}
+            tone={full ? 'danger' : idle / (capacity || 1) > 0.5 ? 'warn' : 'ok'}
+            label="Lugares ociosos no fretado"
+            value={capacity ? <CountUp value={idle} /> : '—'}
+            note={capacity ? (full ? `${full} ${full === 1 ? 'rota acima' : 'rotas acima'} da capacidade` : `${pct(idle, capacity)} da capacidade contratada sem uso`) : 'Nenhuma rota cadastrada'}
+            aside={capacity > 0 && <Ring value={idle / capacity} size={58} thickness={7} track="var(--color-sunken)" color="var(--color-steel-soft)" />}
+            details={{
+              title: 'Lugares livres por rota',
+              rows: routes.map(r => ({
+                label: r.name,
+                value: r.capacity ? (r.riders > r.capacity ? `${r.riders - r.capacity} acima` : `${r.capacity - r.riders} de ${r.capacity}`) : '—',
+                share: r.capacity ? Math.max(0, r.capacity - r.riders) / r.capacity : 0,
+                color: 'var(--color-steel-soft)',
+                tone: r.capacity && r.riders > r.capacity ? ('danger' as const) : undefined,
+              })),
+              hint: 'Rota muito ociosa pode ir para um veículo menor ou ser juntada a outra.',
+            }}
+          />
+          <KpiCard
+            icon={PauseCircle}
+            tone={idleRiders.length ? 'danger' : 'ok'}
+            label="Afastados com transporte pago"
+            value={<CountUp value={idleRiders.length} />}
+            note={idleRiders.length ? `${money(idleCost)}/mês pagos a quem não está trabalhando` : `Nenhum dos ${formatNumber(onLeave)} afastados consome transporte`}
+            details={{
+              title: 'Quem são',
+              rows: idleRiders.slice(0, 6).map(r => ({ label: r.fullName, value: `${modeLabel(r.mode)} · ${r.monthlyCostCents === null ? 'sem valor' : money(r.monthlyCostCents)}`, tone: 'danger' as const })),
+              hint: idleRiders.length ? `Suspender enquanto durar o afastamento economiza ${money(idleCost * 12)} por ano.` : undefined,
+            }}
+          />
+        </SpotlightGrid>
       </div>
+      <Pending rows={rows} />
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Cidades" aside={<span className="text-[13px] text-steel">Top 10 por número de colaboradores</span>}>
-          <HBars data={countBy(rows, r => r.city).slice(0, 10)} color="var(--color-brand)" />
+        <Panel className="overflow-visible" title="Cidades" aside={<span className="text-[13px] text-steel">Top 10 · clique para filtrar</span>}>
+          <ModeLegend />
+          <StackedBars groups={groupByMode(rows, r => r.city).slice(0, 10)} total={total} onPick={onPickCity} />
         </Panel>
-        <Panel title="Transporte" aside={<span className="text-[13px] text-steel">Distribuição por tipo</span>}>
-          <Donut data={modeSlices(rows)} />
+        <Panel title="Transporte" aside={<span className="text-[13px] text-steel">Pessoas e custo por tipo</span>}>
+          <ModeMix rows={rows} />
         </Panel>
-        <Panel title="Departamentos" aside={<span className="text-[13px] text-steel">Colaboradores por departamento</span>}>
-          <HBars data={countBy(rows, r => r.departmentName ?? 'Sem departamento').slice(0, 10)} />
+        <Panel className="overflow-visible" title="Departamentos" aside={<span className="text-[13px] text-steel">Transporte de cada área</span>}>
+          <ModeLegend />
+          <StackedBars groups={groupByMode(rows, r => r.departmentName ?? 'Sem departamento').slice(0, 10)} total={total} />
         </Panel>
-        <Panel title="Rotas do fretado" aside={<span className="text-[13px] text-steel">Passageiros por lugares</span>}>
+        <Panel
+          className="overflow-visible"
+          title="Rotas do fretado"
+          aside={capacity > 0 && <span className="text-[13px] text-steel">{formatNumber(riders)} de {formatNumber(capacity)} lugares ocupados</span>}
+        >
           <Occupancy routes={routes} />
         </Panel>
       </div>
@@ -396,29 +520,404 @@ function Overview({ rows, routes, filtered }: { rows: Row[]; routes: Route[]; fi
   )
 }
 
-function Occupancy({ routes }: { routes: Route[] }) {
-  if (routes.length === 0) return <p className="text-sm text-steel">Nenhuma rota de fretado cadastrada.</p>
+/**
+ * Destaque: quanto da base tem transporte definido, com a divisão por tipo
+ * numa barra segmentada que cresce na entrada.
+ */
+// No fundo escuro, a cor "tinta" (fretado) some: vira branco translúcido.
+const onDark = (color: string) => (color === 'var(--color-ink)' ? 'rgb(255 255 255 / 0.75)' : color)
+
+function CoverageHero({ rows, filtered }: { rows: Row[]; filtered: boolean }) {
+  const ref = useRef<HTMLElement>(null)
+  useTilt(ref, 3)
+  const total = rows.length
+  const slices = modeSlices(rows)
+  const defined = total - (slices.find(s => s.label === UNSET)?.value ?? 0)
+  const coverage = total ? (defined / total) * 100 : 0
+
+  useGSAP(
+    () => {
+      if (reducedMotion()) return
+      gsap.from('[data-seg]', { scaleX: 0, transformOrigin: 'left', duration: 1.3, ease: 'expo.out', stagger: 0.1, delay: 0.35 })
+      gsap.from('[data-legend]', { autoAlpha: 0, y: 8, duration: 0.6, stagger: 0.06, delay: 0.6 })
+    },
+    { scope: ref, dependencies: [slices.map(s => s.value).join()], revertOnUpdate: true },
+  )
+
   return (
-    <ul className="flex flex-col gap-3">
-      {routes.map((r, i) => {
-        const ratio = r.capacity ? r.riders / r.capacity : 0
-        return (
-          <li key={r.id} className="grid grid-cols-[minmax(0,9.5rem)_1fr_4rem] items-center gap-3 text-[13px]">
-            <span className="truncate text-ink-soft" title={r.name}>
-              {r.name}
+    <div data-reveal className="flex">
+      <section
+        ref={ref}
+        aria-label="Cobertura de transporte"
+        className="night-glow grain relative flex min-h-[300px] flex-1 flex-col justify-between rounded-xl border border-night-line p-7 text-snow shadow-lift will-change-transform"
+      >
+        {/* Camadas decorativas recortadas aqui: a seção fica sem overflow para o painel de detalhes aparecer. */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]" aria-hidden>
+          <div className="blueprint absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_right,black,transparent_70%)]" />
+          <div className="absolute inset-0" style={{ background: 'radial-gradient(420px circle at var(--mx, 85%) var(--my, 10%), rgb(254 190 2 / 0.14), transparent 60%)' }} />
+          <Bus className="absolute -right-6 -bottom-8 size-48 text-white/[0.03]" />
+        </div>
+        <div className="relative flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-medium tracking-[0.16em] text-fog uppercase">Cobertura de transporte</p>
+            <Hoverable
+              className="inline-block"
+              details={{
+                title: 'Cobertura por departamento',
+                rows: groupByMode(rows, r => r.departmentName ?? 'Sem departamento').map(g => ({
+                  label: g.label,
+                  value: pct(g.total - g.byMode.unset, g.total),
+                  share: (g.total - g.byMode.unset) / g.total,
+                  color: 'var(--color-brand)',
+                  tone: g.byMode.unset ? ('danger' as const) : ('ok' as const),
+                })),
+                hint: 'Percentual de pessoas com transporte definido em cada área.',
+              }}
+            >
+              <p tabIndex={0} className="num mt-3 cursor-default rounded-md font-display text-[96px] leading-[0.8] font-semibold tracking-[-0.02em] text-brand outline-none drop-shadow-[0_0_30px_rgb(254_190_2/0.25)] focus-visible:ring-2 focus-visible:ring-brand">
+                <CountUp value={coverage} format={percentFormat} />
+              </p>
+            </Hoverable>
+            <p className="mt-3 text-[13.5px] text-fog">
+              <span className="num font-semibold text-snow">{formatNumber(defined)}</span> de <span className="num font-semibold text-snow">{formatNumber(total)}</span> colaboradores com transporte definido
+              {filtered && ' no recorte'}
+            </p>
+          </div>
+          <span className="flex items-center gap-1.5 rounded-full border border-night-line bg-white/5 px-2.5 py-1 text-[11.5px] text-fog">
+            <span className="relative flex size-1.5">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-ok opacity-60" />
+              <span className="relative inline-flex size-1.5 rounded-full bg-ok" />
+            </span>
+            Ao vivo
+          </span>
+        </div>
+
+        <div className="relative mt-6">
+          <div className="flex h-2.5 gap-1 overflow-hidden rounded-full" aria-hidden>
+            {slices
+              .filter(s => s.value > 0)
+              .map(s => (
+                <span key={s.label} data-seg className="h-full rounded-full" style={{ width: `${(s.value / total) * 100}%`, background: onDark(s.color) }} />
+              ))}
+          </div>
+          <ul className="mt-4 grid grid-cols-2 gap-x-5 gap-y-2 text-[13px]">
+            {slices.map(s => {
+              const list = rows.filter(r => modeLabel(r.mode) === s.label)
+              return (
+                <li key={s.label} data-legend>
+                  <Hoverable
+                    details={{
+                      title: `${s.label}: ${formatNumber(s.value)} (${pct(s.value, total)})`,
+                      rows: [
+                        ...topRows(countBy(list, r => r.city), list.length, 3, s.color),
+                        ...(sumCost(list) ? [{ label: 'Custo mensal', value: money(sumCost(list)) }] : []),
+                      ],
+                      hint: 'Cidades com mais pessoas neste tipo.',
+                    }}
+                  >
+                    <span tabIndex={0} className="-mx-1.5 flex cursor-default items-center gap-2 rounded-md px-1.5 py-0.5 outline-none transition-colors hover:bg-white/10 focus-visible:bg-white/10">
+                      <span className="size-2 shrink-0 rounded-full" style={{ background: onDark(s.color) }} aria-hidden />
+                      <span className="num font-semibold">
+                        <CountUp value={s.value} />
+                      </span>
+                      <span className="truncate text-fog">{s.label}</span>
+                    </span>
+                  </Hoverable>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+/** Tudo que falta no cadastro, num lugar só; cada item leva à aba Qualidade dos dados. */
+function Pending({ rows }: { rows: Row[] }) {
+  const navigate = useNavigate()
+  const chartered = rows.filter(r => r.mode === 'chartered')
+  const items = [
+    { icon: AlertTriangle, label: 'Sem transporte definido', list: rows.filter(r => r.mode === null) },
+    { icon: Copy, label: 'Cadastros duplicados', list: rows.filter(r => r.duplicate) },
+    { icon: MapPin, label: 'Sem cidade', list: rows.filter(r => !r.city) },
+    { icon: Bus, label: 'Fretado sem rota', list: chartered.filter(r => !r.routeId) },
+    { icon: MapPin, label: 'Fretado sem ponto de embarque', list: chartered.filter(r => !r.pickupPoint) },
+    { icon: Wallet, label: 'Mobilidade sem custo', list: rows.filter(r => r.mode === 'mobility' && r.monthlyCostCents === null) },
+  ].map(i => ({ ...i, value: i.list.length }))
+  const open = items.reduce((s, i) => s + i.value, 0)
+  return (
+    <section data-reveal className="surface">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+        <h2 className="flex items-center gap-2 font-semibold text-ink">
+          Pendências de cadastro
+          <Badge tone={open ? 'danger' : 'ok'}>{open ? `${formatNumber(open)} em aberto` : 'tudo em dia'}</Badge>
+        </h2>
+        <span className="text-[13px] text-steel">Clique para ver quem precisa de ajuste</span>
+      </header>
+      <ul className="grid sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        {items.map(({ icon: Icon, label, value, list }) => (
+          <li key={label} className="border-line not-last:border-b sm:border-r">
+            <Hoverable
+              details={{
+                title: value ? `${label}: ${formatNumber(value)}` : label,
+                rows: list.slice(0, 6).map(r => ({ label: r.fullName, value: r.registration })),
+                hint: value > 6 ? `E mais ${value - 6}. Veja todos em Qualidade dos dados.` : value ? 'Clique para corrigir em Qualidade dos dados.' : 'Tudo em dia aqui.',
+              }}
+            >
+            <button
+              type="button"
+              onClick={() => void navigate({ to: '/mobilidade', search: { tab: 'qualidade' } })}
+              className="group flex w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-sunken"
+            >
+              <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-sm transition-transform duration-500 group-hover:scale-110', value ? 'bg-danger-soft text-danger' : 'bg-ok-soft text-ok')}>
+                {value ? <Icon className="size-[17px]" aria-hidden /> : <CheckCircle2 className="size-[17px]" aria-hidden />}
+              </span>
+              <span className="min-w-0">
+                <span className={cn('num block font-display text-[26px] leading-none font-semibold', value ? 'text-ink' : 'text-ok')}>
+                  <CountUp value={value} />
+                </span>
+                <span className="mt-1 block text-[12.5px] leading-snug text-steel">{label}</span>
+              </span>
+            </button>
+            </Hoverable>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+// ---------- distribuição por transporte (cidades, departamentos) ----------
+
+type ModeKey = TransportMode | 'unset'
+const MODE_KEYS: ModeKey[] = [...TRANSPORT_MODES, 'unset']
+const modeKey = (r: Row): ModeKey => r.mode ?? 'unset'
+type Group = { label: string; total: number; cost: number; byMode: Record<ModeKey, number> }
+
+const groupByMode = (rows: Row[], key: (r: Row) => string | null | undefined): Group[] => {
+  const map = new Map<string, Group>()
+  for (const r of rows) {
+    const label = key(r)
+    if (!label) continue
+    const g = map.get(label) ?? { label, total: 0, cost: 0, byMode: { mobility: 0, chartered: 0, own: 0, none: 0, unset: 0 } }
+    g.total++
+    g.cost += r.monthlyCostCents ?? 0
+    g.byMode[modeKey(r)]++
+    map.set(label, g)
+  }
+  return [...map.values()].sort((a, b) => b.total - a.total)
+}
+
+function ModeLegend() {
+  return (
+    <ul className="mb-4 flex flex-wrap gap-x-4 gap-y-1.5 text-[12px] text-steel">
+      {MODE_KEYS.map(m => (
+        <li key={m} className="flex items-center gap-1.5">
+          <span className="size-2 rounded-sm" style={{ background: MODE_COLORS[m] }} aria-hidden />
+          {modeLabel(m === 'unset' ? null : m)}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Barra por grupo, dividida pelo tipo de transporte; tamanho relativo ao maior grupo. */
+function StackedBars({ groups, total, onPick }: { groups: Group[]; total: number; onPick?: (label: string) => void }) {
+  if (!groups.length) return <p className="text-sm text-steel">Sem dados neste recorte.</p>
+  const max = Math.max(...groups.map(g => g.total), 1)
+  return (
+    <ul className="-mx-2 flex flex-col">
+      {groups.map((g, i) => {
+        const content = (
+          <>
+            <span className="min-w-0">
+              <span className="block truncate font-medium text-ink-soft" title={g.label}>
+                {g.label}
+              </span>
+              <span className="num block text-[11.5px] text-steel-soft">{g.cost ? `${money(g.cost)}/mês` : 'sem custo'}</span>
             </span>
             <span className="h-5 overflow-hidden rounded-md bg-sunken">
-              <span
-                className={cn('funnel-bar block h-full rounded-md', ratio > 1 ? 'bg-danger' : ratio > 0.85 ? 'bg-brand' : 'bg-ink')}
-                style={{ width: `${Math.min(100, ratio * 100)}%`, animationDelay: `${i * 40}ms` }}
-              />
+              <span className="funnel-bar flex h-full gap-px" style={{ width: `${(g.total / max) * 100}%`, animationDelay: `${i * 50}ms` }}>
+                {MODE_KEYS.filter(m => g.byMode[m]).map(m => (
+                  <span
+                    key={m}
+                    className="h-full transition-opacity duration-200 first:rounded-l-md last:rounded-r-md group-hover/hv:opacity-90"
+                    style={{ width: `${(g.byMode[m] / g.total) * 100}%`, background: MODE_COLORS[m] }}
+                  />
+                ))}
+              </span>
             </span>
-            <span className={cn('num text-right font-semibold', ratio > 1 ? 'text-danger' : 'text-ink')}>
-              {r.riders}/{r.capacity ?? '—'}
+            <span className="text-right">
+              <span className="num block font-semibold text-ink">{formatNumber(g.total)}</span>
+              <span className="num block text-[11.5px] text-steel-soft">{pct(g.total, total)}</span>
             </span>
+          </>
+        )
+        const cls = 'grid w-full grid-cols-[minmax(0,9rem)_1fr_3rem] items-center gap-3 rounded-md px-2 py-1.5 text-left text-[13px] outline-none transition-colors hover:bg-sunken focus-visible:bg-sunken'
+        const details: Details = {
+          title: `${g.label}: ${formatNumber(g.total)} pessoas`,
+          rows: [
+            ...MODE_KEYS.filter(m => g.byMode[m]).map(m => ({
+              label: modeLabel(m === 'unset' ? null : m),
+              value: `${g.byMode[m]} · ${pct(g.byMode[m], g.total)}`,
+              share: g.byMode[m] / g.total,
+              color: MODE_COLORS[m],
+              tone: m === 'unset' ? ('danger' as const) : undefined,
+            })),
+            { label: 'Custo mensal', value: money(g.cost) },
+            { label: 'Custo por pessoa', value: money(Math.round(g.cost / g.total)) },
+          ],
+          hint: onPick ? 'Clique para filtrar a página por esta cidade.' : undefined,
+        }
+        return (
+          <li key={g.label}>
+            <Hoverable details={details}>
+              {onPick ? (
+                <button type="button" onClick={() => onPick(g.label)} className={cls}>
+                  {content}
+                </button>
+              ) : (
+                <div tabIndex={0} className={cn(cls, 'cursor-default')}>
+                  {content}
+                </div>
+              )}
+            </Hoverable>
           </li>
         )
       })}
+    </ul>
+  )
+}
+
+/** Rosca com destaque ao passar o mouse e, ao lado, pessoas, participação e custo de cada tipo. */
+function ModeMix({ rows }: { rows: Row[] }) {
+  const [active, setActive] = useState<ModeKey | null>(null)
+  const data = MODE_KEYS.map(m => {
+    const list = rows.filter(r => modeKey(r) === m)
+    const cost = list.reduce((s, r) => s + (r.monthlyCostCents ?? 0), 0)
+    const paying = list.filter(r => r.monthlyCostCents !== null).length
+    return { key: m, label: modeLabel(m === 'unset' ? null : m), value: list.length, cost, avg: paying ? cost / paying : null }
+  }).filter(d => d.value > 0)
+  const total = rows.length
+  if (!total) return <p className="text-sm text-steel">Sem dados neste recorte.</p>
+  const shown = data.find(d => d.key === active)
+  return (
+    <div className="flex flex-wrap items-center gap-6">
+      <div className="relative size-44 shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="label"
+              innerRadius="66%"
+              outerRadius="100%"
+              paddingAngle={1.5}
+              stroke="var(--color-paper)"
+              startAngle={90}
+              endAngle={-270}
+              onMouseEnter={(_, i) => setActive(data[i]?.key ?? null)}
+              onMouseLeave={() => setActive(null)}
+            >
+              {data.map(d => (
+                <Cell key={d.key} fill={MODE_COLORS[d.key]} fillOpacity={active && active !== d.key ? 0.25 : 1} style={{ transition: 'fill-opacity 250ms' }} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+          <span className="num font-display text-[30px] leading-none font-semibold text-ink">{shown ? pct(shown.value, total) : formatNumber(total)}</span>
+          <span className="mt-0.5 max-w-24 text-[11.5px] leading-tight text-steel">{shown ? shown.label : 'colaboradores'}</span>
+        </span>
+      </div>
+      <ul className="flex min-w-60 flex-1 flex-col gap-1 text-[13px]">
+        {data.map(d => (
+          <li
+            key={d.key}
+            onMouseEnter={() => setActive(d.key)}
+            onMouseLeave={() => setActive(null)}
+            className={cn('rounded-md px-2 py-1.5 transition-colors', active === d.key && 'bg-sunken')}
+          >
+            <span className="flex items-center gap-2">
+              <span className="size-2.5 shrink-0 rounded-sm" style={{ background: MODE_COLORS[d.key] }} aria-hidden />
+              <span className="flex-1 truncate text-ink-soft">{d.label}</span>
+              <span className="num font-semibold text-ink">{formatNumber(d.value)}</span>
+              <span className="num w-10 text-right text-steel-soft">{pct(d.value, total)}</span>
+            </span>
+            {d.cost > 0 && (
+              <span className="num mt-0.5 block pl-[18px] text-[11.5px] text-steel">
+                {money(d.cost)}/mês{d.avg !== null && ` · ${money(Math.round(d.avg))} por pessoa`}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+const routeStatus = (riders: number, capacity: number | null) => {
+  if (!capacity) return { label: 'Sem capacidade', tone: 'neutral' as const, bar: 'bg-steel-soft' }
+  const ratio = riders / capacity
+  if (ratio > 1) return { label: 'Acima da capacidade', tone: 'danger' as const, bar: 'bg-danger' }
+  if (ratio >= 0.85) return { label: 'Quase lotada', tone: 'warn' as const, bar: 'bg-brand' }
+  if (ratio < 0.4) return { label: 'Ociosa', tone: 'info' as const, bar: 'bg-info' }
+  return { label: 'Com vagas', tone: 'ok' as const, bar: 'bg-ok' }
+}
+
+/** Cada rota: situação, ocupação, lugares livres e dados do veículo. */
+function Occupancy({ routes }: { routes: Route[] }) {
+  if (routes.length === 0) return <p className="text-sm text-steel">Nenhuma rota de fretado cadastrada.</p>
+  return (
+    <ul className="flex flex-col gap-2">
+      {[...routes]
+        .sort((a, b) => b.riders / (b.capacity || 1) - a.riders / (a.capacity || 1))
+        .map((r, i) => {
+          const ratio = r.capacity ? r.riders / r.capacity : 0
+          const status = routeStatus(r.riders, r.capacity)
+          return (
+            <li key={r.id}>
+            <Hoverable
+              details={{
+                title: r.name,
+                rows: [
+                  { label: 'Passageiros', value: formatNumber(r.riders) },
+                  { label: 'Capacidade', value: r.capacity ? formatNumber(r.capacity) : 'não informada' },
+                  { label: 'Ocupação', value: r.capacity ? pct(r.riders, r.capacity) : '—', share: Math.min(1, ratio), color: 'var(--color-brand)' },
+                  { label: r.capacity && r.riders > r.capacity ? 'Acima da capacidade' : 'Lugares livres', value: r.capacity ? formatNumber(Math.abs(r.capacity - r.riders)) : '—', tone: r.capacity && r.riders > r.capacity ? ('danger' as const) : undefined },
+                  { label: 'Veículo', value: r.vehicle ?? '—' },
+                  { label: 'Turno', value: r.shift ?? '—' },
+                ],
+                hint: status.label === 'Ociosa' ? 'Menos de 40% ocupada: avalie um veículo menor.' : status.tone === 'danger' ? 'Mais passageiros que lugares: remaneje ou aumente o veículo.' : undefined,
+              }}
+            >
+            <div tabIndex={0} className="-mx-2 rounded-md px-2 py-1.5 text-[13px] outline-none transition-colors hover:bg-sunken focus-visible:bg-sunken">
+              <div className="flex items-center justify-between gap-3">
+                <span className="min-w-0 truncate font-medium text-ink" title={r.name}>
+                  {r.name}
+                </span>
+                <Badge tone={status.tone}>{status.label}</Badge>
+              </div>
+              <div className="mt-1.5 grid grid-cols-[1fr_auto] items-center gap-3">
+                <span className="relative h-2.5 overflow-hidden rounded-full bg-sunken">
+                  <span className={cn('funnel-bar block h-full rounded-full', status.bar)} style={{ width: `${Math.min(100, ratio * 100)}%`, animationDelay: `${i * 60}ms` }} />
+                  {/* Marca de 85%: daqui em diante a rota está quase lotada. */}
+                  <span className="absolute inset-y-0 left-[85%] w-px bg-ink/25" aria-hidden />
+                </span>
+                <span className="num font-semibold text-ink">
+                  {r.riders}/{r.capacity ?? '—'} <span className="font-normal text-steel-soft">{r.capacity ? pct(r.riders, r.capacity) : ''}</span>
+                </span>
+              </div>
+              <p className="mt-1 text-[11.5px] text-steel">
+                {[r.vehicle, r.shift, r.driver && `Motorista: ${r.driver}`].filter(Boolean).join(' · ') || 'Sem dados do veículo'}
+                {r.capacity ? ` · ${Math.max(0, r.capacity - r.riders)} lugares livres` : ''}
+              </p>
+            </div>
+            </Hoverable>
+            </li>
+          )
+        })}
     </ul>
   )
 }
@@ -442,8 +941,37 @@ const personColumn = {
 }
 
 function People({ rows, onEdit }: { rows: Row[]; onEdit?: (row: BoardRow) => void }) {
+  const defined = rows.filter(r => r.mode !== null).length
+  const cost = rows.reduce((s, r) => s + (r.monthlyCostCents ?? 0), 0)
+  const working = rows.filter(r => r.status === 'active').length
   return (
-    <DataTable
+    <div className="flex flex-col gap-6">
+      <SpotlightGrid className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard icon={Users} tone="ink" label="Colaboradores" details={{ title: 'Situação', rows: [{ label: 'Trabalhando', value: formatNumber(working), share: rows.length ? working / rows.length : 0, color: 'var(--color-ok)' }, { label: 'Afastados', value: formatNumber(rows.length - working), share: rows.length ? (rows.length - working) / rows.length : 0, color: 'var(--color-brand)' }, ...topRows(countBy(rows, r => r.departmentName ?? 'Sem departamento'), rows.length, 4)], hint: 'Distribuição por área no recorte atual.' }} value={<CountUp value={rows.length} />} note={`${formatNumber(working)} trabalhando, ${formatNumber(rows.length - working)} afastados`} />
+        <KpiCard
+          icon={CheckCircle2}
+          tone="ok"
+          label="Com transporte definido" details={{ title: 'Pessoas por tipo', rows: modeRows(rows) }}
+          value={<CountUp value={rows.length ? (defined / rows.length) * 100 : 0} format={percentFormat} />}
+          note={`${formatNumber(defined)} de ${formatNumber(rows.length)} pessoas`}
+          aside={<Ring value={rows.length ? defined / rows.length : 0} size={58} thickness={7} track="var(--color-sunken)" color="var(--color-ok)" />}
+        />
+        <KpiCard
+          icon={Wallet}
+          tone="info"
+          label="Custo por colaborador" details={{ title: 'Custo mensal por tipo', rows: costRows(rows), hint: 'A média divide o custo total por todos os colaboradores do recorte, inclusive quem não usa transporte pago.' }}
+          value={rows.length ? <CountUp value={cost / rows.length} format={moneyFormat} /> : '—'}
+          note={`Média da base inteira · ${money(cost)}/mês no total`}
+        />
+        <KpiCard
+          icon={rows.length - defined ? AlertTriangle : CheckCircle2}
+          tone={rows.length - defined ? 'danger' : 'ok'}
+          label="Sem cadastro de transporte" details={{ title: 'Quem falta cadastrar', rows: rows.filter(r => r.mode === null).slice(0, 6).map(r => ({ label: r.fullName, value: r.registration, tone: 'danger' as const })), hint: rows.length - defined > 6 ? `E mais ${rows.length - defined - 6}.` : undefined }}
+          value={<CountUp value={rows.length - defined} />}
+          note={rows.length - defined ? 'Clique na linha para completar' : 'Todos cadastrados'}
+        />
+      </SpotlightGrid>
+      <DataTable
       rows={rows}
       empty="Ninguém com esses filtros"
       minWidth={960}
@@ -457,7 +985,8 @@ function People({ rows, onEdit }: { rows: Row[]; onEdit?: (row: BoardRow) => voi
         { label: 'Cidade', render: r => r.city ?? '—' },
         { label: 'Custo/mês', className: 'text-right', render: r => (r.monthlyCostCents === null ? '—' : <span className="num">{money(r.monthlyCostCents)}</span>) },
       ]}
-    />
+      />
+    </div>
   )
 }
 
@@ -465,14 +994,46 @@ function MobilityList({ rows, onEdit }: { rows: Row[]; onEdit?: (row: BoardRow) 
   const list = rows.filter(r => r.mode === 'mobility')
   const cost = list.reduce((s, r) => s + (r.monthlyCostCents ?? 0), 0)
   const withCost = list.filter(r => r.monthlyCostCents !== null).length
+  const avgMobility = avgCost(rows, 'mobility')
+  const avgChartered = avgCost(rows, 'chartered')
+  // Quanto a mobilidade economiza por mês frente a pôr essas pessoas no fretado.
+  const saving = avgMobility !== null && avgChartered !== null ? (avgChartered - avgMobility) * list.length : null
+  const providers = countBy(list, r => r.provider)
+  const cities = countBy(list, r => r.city)
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={Smartphone} tone="brand" label="Com mobilidade" value={<CountUp value={list.length} />} note={`${pct(list.length, rows.length)} da base`} />
-        <KpiCard icon={Wallet} tone="info" label="Custo mensal" value={<span className="text-[24px]">{money(cost)}</span>} note="Soma dos cartões e apps" />
-        <KpiCard icon={Wallet} tone="ok" label="Custo médio" value={<span className="text-[24px]">{withCost ? money(Math.round(cost / withCost)) : '—'}</span>} note="Por pessoa com valor informado" />
-        <KpiCard icon={AlertTriangle} tone="warn" label="Sem custo informado" value={<CountUp value={list.length - withCost} />} note="Custo mensal fica subestimado" />
-      </div>
+      <SpotlightGrid className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          icon={Smartphone}
+          tone="brand"
+          label="Participação na base" details={{ title: 'Mobilidade por departamento', rows: topRows(countBy(list, r => r.departmentName ?? 'Sem departamento'), list.length, 5, MODE_COLORS.mobility) }}
+          value={<CountUp value={rows.length ? (list.length / rows.length) * 100 : 0} format={percentFormat} />}
+          note={`${formatNumber(list.length)} pessoas usam cartão ou app`}
+          aside={<Ring value={rows.length ? list.length / rows.length : 0} size={58} thickness={7} track="var(--color-sunken)" />}
+        />
+        <KpiCard
+          icon={Wallet}
+          tone="info"
+          label="Custo anual projetado" details={{ title: 'Mês a mês e no ano', rows: [{ label: 'Por mês', value: money(cost) }, { label: 'Por pessoa/mês', value: withCost ? money(Math.round(cost / withCost)) : '—' }, { label: 'Por pessoa/ano', value: withCost ? money(Math.round((cost / withCost) * 12)) : '—' }, { label: 'Sem valor informado', value: formatNumber(list.length - withCost), tone: list.length - withCost ? ('danger' as const) : ('ok' as const) }] }}
+          value={<CountUp value={cost * 12} format={moneyFormat} />}
+          note={withCost ? `${money(Math.round(cost / withCost))} por pessoa/mês${withCost < list.length ? ` · ${list.length - withCost} sem valor` : ''}` : 'Nenhum valor informado'}
+        />
+        <KpiCard
+          icon={Gauge}
+          tone={saving !== null && saving >= 0 ? 'ok' : 'warn'}
+          details={{ title: 'Como a conta é feita', rows: [{ label: 'Custo médio do fretado', value: avgChartered === null ? '—' : money(Math.round(avgChartered)), color: MODE_COLORS.chartered }, { label: 'Custo médio da mobilidade', value: avgMobility === null ? '—' : money(Math.round(avgMobility)), color: MODE_COLORS.mobility }, { label: 'Pessoas na mobilidade', value: formatNumber(list.length) }, ...(saving !== null ? [{ label: 'Por ano', value: money(Math.round(Math.abs(saving) * 12)), tone: saving >= 0 ? ('ok' as const) : ('danger' as const) }] : [])], hint: '(custo médio do fretado − custo médio da mobilidade) × pessoas na mobilidade.' }}
+          label={saving !== null && saving < 0 ? 'Custo extra frente ao fretado' : 'Economia frente ao fretado'}
+          value={saving === null ? '—' : <CountUp value={Math.abs(saving)} format={moneyFormat} />}
+          note={saving === null ? 'Falta custo do fretado para comparar' : `Por mês, se essas ${list.length} pessoas fossem para o fretado`}
+        />
+        <KpiCard
+          icon={MapPin}
+          tone="ok"
+          label="Cidades com mobilidade" details={{ title: 'Pessoas e custo por cidade', rows: groupByMode(list, r => r.city).slice(0, 6).map(g => ({ label: g.label, value: `${g.total} · ${money(g.cost)}`, share: g.total / (list.length || 1), color: MODE_COLORS.mobility })), hint: providers.length > 1 ? `${providers.length} fornecedores no contrato.` : undefined }}
+          value={<CountUp value={cities.length} />}
+          note={providers[0] ? `Fornecedor principal: ${providers[0].label} (${pct(providers[0].value, list.length)})` : 'Nenhum fornecedor informado'}
+        />
+      </SpotlightGrid>
       <DataTable
         rows={list}
         empty="Ninguém com mobilidade neste recorte"
@@ -492,8 +1053,32 @@ function MobilityList({ rows, onEdit }: { rows: Row[]; onEdit?: (row: BoardRow) 
 
 function Chartered({ rows, routes, onEdit }: { rows: Row[]; routes: Route[]; onEdit?: (row: BoardRow) => void }) {
   const list = rows.filter(r => r.mode === 'chartered')
+  const capacity = routes.reduce((s, r) => s + (r.capacity ?? 0), 0)
+  const riders = routes.reduce((s, r) => s + r.riders, 0)
+  const cost = list.reduce((s, r) => s + (r.monthlyCostCents ?? 0), 0)
+  const occupancy = capacity ? riders / capacity : 0
+  const noPickup = list.filter(r => !r.routeId || !r.pickupPoint).length
   return (
     <div className="flex flex-col gap-6">
+      <SpotlightGrid className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard icon={Users} tone="ink" label="Passageiros" details={{ title: 'Passageiros por rota', rows: routes.map(r => ({ label: r.name, value: formatNumber(list.filter(p => p.routeId === r.id).length), share: list.length ? list.filter(p => p.routeId === r.id).length / list.length : 0, color: MODE_COLORS.chartered })) }} value={<CountUp value={list.length} />} note={`${pct(list.length, rows.length)} da base em ${routes.length} rotas`} />
+        <KpiCard
+          icon={Gauge}
+          tone={occupancy > 1 ? 'danger' : occupancy >= 0.85 ? 'warn' : 'ok'}
+          label="Ocupação média" details={{ title: 'Ocupação de cada rota', rows: routes.map(r => ({ label: r.name, value: r.capacity ? `${r.riders}/${r.capacity} · ${pct(r.riders, r.capacity)}` : '—', share: r.capacity ? Math.min(1, r.riders / r.capacity) : 0, color: r.capacity && r.riders > r.capacity ? 'var(--color-danger)' : 'var(--color-brand)' })), hint: 'Acima de 85% a rota está quase lotada; abaixo de 40%, ociosa.' }}
+          value={capacity ? <CountUp value={occupancy * 100} format={percentFormat} /> : '—'}
+          note={capacity ? `${formatNumber(Math.max(0, capacity - riders))} lugares livres de ${formatNumber(capacity)}` : 'Nenhuma capacidade informada'}
+          aside={capacity > 0 && <Ring value={occupancy} size={58} thickness={7} track="var(--color-sunken)" color={occupancy > 1 ? 'var(--color-danger)' : 'var(--color-brand)'} />}
+        />
+        <KpiCard icon={Wallet} tone="info" label="Custo mensal" details={{ title: 'Custo do fretado por rota', rows: routes.map(r => { const c = sumCost(list.filter(p => p.routeId === r.id)); return { label: r.name, value: money(c), share: cost ? c / cost : 0, color: MODE_COLORS.chartered } }), hint: `Projeção anual: ${money(cost * 12)}.` }} value={<CountUp value={cost} format={moneyFormat} />} note={list.length ? `${money(Math.round(cost / list.length))} por passageiro` : 'Sem passageiros'} />
+        <KpiCard
+          icon={noPickup ? AlertTriangle : CheckCircle2}
+          tone={noPickup ? 'warn' : 'ok'}
+          label="Sem rota ou ponto" details={{ title: 'Quem está sem rota ou ponto', rows: list.filter(r => !r.routeId || !r.pickupPoint).slice(0, 6).map(r => ({ label: r.fullName, value: !r.routeId ? 'sem rota' : 'sem ponto', tone: 'danger' as const })) }}
+          value={<CountUp value={noPickup} />}
+          note={noPickup ? 'O motorista não sabe onde buscar' : 'Todos com rota e ponto de embarque'}
+        />
+      </SpotlightGrid>
       <Routes routes={routes} rows={list} />
       <Panel title="Passageiros" aside={<span className="text-[13px] text-steel">Ponto de embarque de cada pessoa no fretado</span>} bodyClassName="p-0">
         <DataTable
@@ -517,50 +1102,95 @@ function Chartered({ rows, routes, onEdit }: { rows: Row[]; routes: Route[]; onE
 // ---------- cidades ----------
 
 function Cities({ rows, onPick }: { rows: Row[]; onPick: (city: string) => void }) {
-  const cities = useMemo(() => {
-    const map = new Map<string, { name: string; total: number; mobility: number; chartered: number; cost: number }>()
-    for (const r of rows) {
-      if (!r.city) continue
-      const c = map.get(r.city) ?? { name: r.city, total: 0, mobility: 0, chartered: 0, cost: 0 }
-      c.total++
-      if (r.mode === 'mobility') c.mobility++
-      if (r.mode === 'chartered') c.chartered++
-      c.cost += r.monthlyCostCents ?? 0
-      map.set(r.city, c)
-    }
-    return [...map.values()].sort((a, b) => b.total - a.total)
-  }, [rows])
+  const cities = useMemo(() => groupByMode(rows, r => r.city), [rows])
   if (!cities.length) return <EmptyState icon={MapPin} title="Nenhuma cidade identificada neste recorte" />
+  const located = cities.reduce((s, c) => s + c.total, 0)
+  const top = cities[0]!
+  const cost = cities.reduce((s, c) => s + c.cost, 0)
+  const withPending = cities.filter(c => c.byMode.unset > 0).length
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-      {cities.map(c => (
-        <button
-          key={c.name}
-          type="button"
-          onClick={() => onPick(c.name)}
-          title="Filtrar por esta cidade"
-          className="rounded-xl border border-line bg-paper p-4 text-left transition-[box-shadow,transform,border-color] duration-200 hover:-translate-y-px hover:border-line-strong hover:shadow-md"
-        >
-          <span className="mb-3 flex items-center gap-2 font-semibold text-ink">
-            <MapPin className="size-4 text-brand-ink" aria-hidden /> {c.name}
-          </span>
-          {[
-            ['Colaboradores', formatNumber(c.total)],
-            ['Mobilidade', formatNumber(c.mobility)],
-            ['Fretado', formatNumber(c.chartered)],
-            ['Custo mensal', money(c.cost)],
-          ].map(([label, value]) => (
-            <span key={label} className="flex justify-between py-0.5 text-[13px]">
-              <span className="text-steel">{label}</span>
-              <span className="num font-semibold text-ink">{value}</span>
+    <div className="flex flex-col gap-6">
+      <SpotlightGrid className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard icon={MapPin} tone="ok" label="Cidades atendidas" details={{ title: 'Ranking de cidades', rows: topRows(cities.map(c => ({ label: c.label, value: c.total })), located, 6, 'var(--color-ok)') }} value={<CountUp value={cities.length} />} note={`${formatNumber(located)} colaboradores com cidade identificada`} />
+        <KpiCard
+          icon={Building2}
+          tone="brand"
+          label="Maior concentração" details={{ title: `${top.label} por tipo`, rows: MODE_KEYS.filter(m => top.byMode[m]).map(m => ({ label: modeLabel(m === 'unset' ? null : m), value: formatNumber(top.byMode[m]), share: top.byMode[m] / top.total, color: MODE_COLORS[m] })), hint: `Custo mensal da cidade: ${money(top.cost)}.` }}
+          value={<CountUp value={(top.total / located) * 100} format={percentFormat} />}
+          note={`${top.label}: ${formatNumber(top.total)} colaboradores`}
+          aside={<Ring value={top.total / located} size={58} thickness={7} track="var(--color-sunken)" />}
+        />
+        <KpiCard icon={Wallet} tone="info" label="Custo médio por cidade" details={{ title: 'Cidades mais caras', rows: [...cities].sort((a, b) => b.cost - a.cost).slice(0, 6).map(c => ({ label: c.label, value: `${money(c.cost)} · ${money(Math.round(c.cost / c.total))}/pessoa`, share: cost ? c.cost / cost : 0, color: 'var(--color-info)' })) }} value={<CountUp value={cost / cities.length} format={moneyFormat} />} note={`${money(cost)}/mês somando todas`} />
+        <KpiCard
+          icon={withPending ? AlertTriangle : CheckCircle2}
+          tone={withPending ? 'danger' : 'ok'}
+          label="Cidades com pendência" details={{ title: 'Pessoas sem cadastro, por cidade', rows: cities.filter(c => c.byMode.unset).map(c => ({ label: c.label, value: `${c.byMode.unset} de ${c.total}`, share: c.byMode.unset / c.total, color: 'var(--color-danger)', tone: 'danger' as const })) }}
+          value={<CountUp value={withPending} />}
+          note={withPending ? 'Com gente sem transporte cadastrado' : 'Todas com transporte definido'}
+        />
+      </SpotlightGrid>
+      <div data-reveal>
+        <ModeLegend />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+        {cities.map((c, i) => {
+          const people = rows.filter(r => r.city === c.label)
+          return (
+          <Hoverable
+            key={c.label}
+            className="flex"
+            details={{
+              title: `Bairros em ${c.label}`,
+              rows: [
+                ...topRows(countBy(people, r => r.pickupDistrict ?? r.homeDistrict), c.total, 5, 'var(--color-brand)'),
+                { label: 'Custo por pessoa', value: money(Math.round(c.cost / c.total)) },
+              ],
+              hint: 'Clique para filtrar a página por esta cidade.',
+            }}
+          >
+          <button
+            type="button"
+            data-reveal
+            onClick={() => onPick(c.label)}
+            title="Filtrar por esta cidade"
+            className="surface group relative flex-1 overflow-hidden p-5 text-left transition-[box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-lift"
+          >
+            <span className="flex items-start justify-between gap-3">
+              <span className="min-w-0">
+                <span className="flex items-center gap-2 font-semibold text-ink">
+                  <MapPin className="size-4 shrink-0 text-brand-ink transition-transform duration-500 group-hover:-translate-y-0.5 group-hover:scale-110" aria-hidden />
+                  <span className="truncate">{c.label}</span>
+                </span>
+                <span className="mt-1 block text-[12px] text-steel">
+                  {i === 0 ? 'Maior polo' : `${i + 1}º lugar`} · {pct(c.total, located)} dos colaboradores
+                </span>
+              </span>
+              <span className="num font-display text-[34px] leading-none font-semibold text-ink">
+                <CountUp value={c.total} />
+              </span>
             </span>
-          ))}
-          <span className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-sunken" aria-hidden>
-            <span style={{ width: `${(c.mobility / c.total) * 100}%`, background: MODE_COLORS.mobility }} />
-            <span style={{ width: `${(c.chartered / c.total) * 100}%`, background: MODE_COLORS.chartered }} />
-          </span>
-        </button>
-      ))}
+            <span className="mt-4 flex h-2 gap-px overflow-hidden rounded-full bg-sunken" aria-hidden>
+              {MODE_KEYS.filter(m => c.byMode[m]).map(m => (
+                <span key={m} className="funnel-bar h-full" style={{ width: `${(c.byMode[m] / c.total) * 100}%`, background: MODE_COLORS[m], animationDelay: `${i * 40}ms` }} />
+              ))}
+            </span>
+            <span className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[12.5px]">
+              {MODE_KEYS.filter(m => c.byMode[m]).map(m => (
+                <span key={m} className="flex items-center justify-between gap-2">
+                  <span className="truncate text-steel">{modeLabel(m === 'unset' ? null : m)}</span>
+                  <span className={cn('num font-semibold', m === 'unset' ? 'text-danger' : 'text-ink')}>{c.byMode[m]}</span>
+                </span>
+              ))}
+            </span>
+            <span className="mt-3 flex justify-between border-t border-line pt-2.5 text-[12.5px]">
+              <span className="text-steel">Custo mensal</span>
+              <span className="num font-semibold text-ink">{money(c.cost)}</span>
+            </span>
+          </button>
+          </Hoverable>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -568,47 +1198,96 @@ function Cities({ rows, onPick }: { rows: Row[]; onPick: (city: string) => void 
 // ---------- indicadores ----------
 
 function Indicators({ rows }: { rows: Row[] }) {
+  const total = rows.length
+  const working = rows.filter(r => r.status === 'active').length
+  const positions = groupByMode(rows, r => r.positionTitle ?? 'Cargo não informado')
+  const departments = groupByMode(rows, r => r.departmentName ?? 'Sem departamento')
+  // Quem usa fretado ou mobilidade: o custo que a empresa banca.
+  const sponsored = rows.filter(r => r.mode === 'chartered' || r.mode === 'mobility').length
+  const costliest = [...departments].sort((a, b) => b.cost - a.cost)[0]
   return (
-    <div className="grid gap-6 xl:grid-cols-2">
-      <Panel title="Todas as cidades" aside={<span className="text-[13px] text-steel">Por total de colaboradores</span>}>
-        <div className="max-h-[420px] overflow-y-auto pr-1">
-          <HBars data={countBy(rows, r => r.city)} color="var(--color-brand)" />
-        </div>
-      </Panel>
-      <Panel title="Cargos" aside={<span className="text-[13px] text-steel">Top 10 por número de colaboradores</span>}>
-        <HBars data={countBy(rows, r => r.positionTitle ?? 'Cargo não informado').slice(0, 10)} empty="Nenhum cargo neste recorte." />
-      </Panel>
-      <Panel title="Situação" aside={<span className="text-[13px] text-steel">Trabalhando e afastados</span>}>
-        <Donut
-          data={[
-            { label: 'Trabalhando', value: rows.filter(r => r.status === 'active').length, color: 'var(--color-ok)' },
-            { label: 'Afastado', value: rows.filter(r => r.status === 'on_leave').length, color: 'var(--color-brand)' },
-          ]}
+    <div className="flex flex-col gap-6">
+      <SpotlightGrid className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          icon={Users}
+          tone="ok"
+          label="Trabalhando" details={{ title: 'Trabalhando por departamento', rows: departments.map(g => { const w = rows.filter(r => (r.departmentName ?? 'Sem departamento') === g.label && r.status === 'active').length; return { label: g.label, value: `${w} de ${g.total}`, share: w / g.total, color: 'var(--color-ok)' } }) }}
+          value={<CountUp value={total ? (working / total) * 100 : 0} format={percentFormat} />}
+          note={`${formatNumber(working)} de ${formatNumber(total)} colaboradores`}
+          aside={<Ring value={total ? working / total : 0} size={58} thickness={7} track="var(--color-sunken)" color="var(--color-ok)" />}
         />
+        <KpiCard
+          icon={Bus}
+          tone="brand"
+          label="Transporte pago pela empresa" details={{ title: 'Fretado e mobilidade', rows: modeRows(rows.filter(r => r.mode === 'chartered' || r.mode === 'mobility')).map(d => ({ ...d, share: total ? (d.share ?? 0) * sponsored / total : 0 })), hint: `Custo mensal desses ${sponsored}: ${money(sumCost(rows.filter(r => r.mode === 'chartered' || r.mode === 'mobility')))}.` }}
+          value={<CountUp value={total ? (sponsored / total) * 100 : 0} format={percentFormat} />}
+          note={`${formatNumber(sponsored)} no fretado ou na mobilidade`}
+        />
+        <KpiCard icon={Building2} tone="info" label="Área de maior custo" details={{ title: 'Custo mensal por área', rows: [...departments].sort((a, b) => b.cost - a.cost).slice(0, 6).map(g => ({ label: g.label, value: money(g.cost), share: costliest?.cost ? g.cost / costliest.cost : 0, color: 'var(--color-info)' })) }} value={costliest ? <CountUp value={costliest.cost} format={moneyFormat} /> : '—'} note={costliest ? `${costliest.label}, por mês` : 'Sem departamentos'} />
+        <KpiCard icon={Users} tone="ink" label="Cargos distintos" details={{ title: 'Cargos mais comuns', rows: topRows(positions.map(g => ({ label: g.label, value: g.total })), total, 6) }} value={<CountUp value={positions.length} />} note={positions[0] ? `Mais comum: ${positions[0].label}` : 'Nenhum cargo'} />
+      </SpotlightGrid>
+      <div className="grid gap-6 xl:grid-cols-2">
+      <Panel className="overflow-visible" title="Todas as cidades" aside={<span className="text-[13px] text-steel">Transporte de cada cidade</span>}>
+        <ModeLegend />
+        <StackedBars groups={groupByMode(rows, r => r.city)} total={total} />
       </Panel>
-      <Panel title="Participação de cada transporte" aside={<span className="text-[13px] text-steel">Sobre quem tem transporte definido</span>}>
-        <Donut data={modeSlices(rows, false)} />
+      <Panel className="overflow-visible" title="Cargos" aside={<span className="text-[13px] text-steel">Top 10 e o transporte de cada um</span>}>
+        <ModeLegend />
+        <StackedBars groups={positions.slice(0, 10)} total={total} />
       </Panel>
+      <Panel className="overflow-visible" title="Fornecedores" aside={<span className="text-[13px] text-steel">Pessoas e custo mensal de cada contrato</span>}>
+        <ModeLegend />
+        <StackedBars groups={groupByMode(rows, r => r.provider)} total={total} />
+      </Panel>
+      <Panel className="overflow-visible" title="Departamentos" aside={<span className="text-[13px] text-steel">Pessoas, transporte e custo de cada área</span>}>
+        <ModeLegend />
+        <StackedBars groups={departments} total={total} />
+      </Panel>
+      </div>
     </div>
   )
 }
 
 // ---------- qualidade dos dados ----------
 
-function ScoreRing({ score }: { score: number }) {
-  const r = 46
-  const circ = 2 * Math.PI * r
+/** Nota da qualidade do cadastro num bloco escuro, com o anel desenhado na entrada. */
+function ScoreHero({ score, complete, total, details }: { score: number; complete: number; total: number; details: Details }) {
+  const ref = useRef<HTMLElement>(null)
+  useTilt(ref, 3)
   const color = score >= 85 ? 'var(--color-ok)' : score >= 65 ? 'var(--color-brand)' : 'var(--color-danger)'
+  const verdict = score >= 85 ? 'Cadastro confiável' : score >= 65 ? 'Precisa de atenção' : 'Cadastro crítico'
   return (
-    <div className="relative size-[120px] shrink-0">
-      <svg viewBox="0 0 120 120" className="size-full -rotate-90" aria-hidden>
-        <circle cx="60" cy="60" r={r} fill="none" stroke="var(--color-sunken)" strokeWidth="12" />
-        <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="12" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={circ - (score / 100) * circ} />
-      </svg>
-      <span className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="num font-display text-[30px] leading-none font-semibold text-ink">{score}%</span>
-        <span className="text-[11.5px] text-steel">qualidade</span>
-      </span>
+    <div data-reveal className="flex">
+      <section
+        ref={ref}
+        aria-label="Qualidade do cadastro"
+        className="night-glow grain relative flex flex-1 items-center gap-6 rounded-xl border border-night-line p-7 text-snow shadow-lift will-change-transform"
+      >
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]" aria-hidden>
+          <div className="blueprint absolute inset-0 [mask-image:radial-gradient(ellipse_at_top_right,black,transparent_70%)]" />
+        </div>
+        <Hoverable details={details} className="relative shrink-0">
+          <div tabIndex={0} className="cursor-default rounded-full outline-none transition-transform duration-300 hover:scale-[1.03] focus-visible:ring-2 focus-visible:ring-brand">
+            <Ring value={score / 100} size={132} thickness={12} color={color}>
+              <span>
+                <span className="num block font-display text-[38px] leading-none font-semibold text-snow">
+                  <CountUp value={score} format={percentFormat} />
+                </span>
+                <span className="text-[11px] text-fog">qualidade</span>
+              </span>
+            </Ring>
+          </div>
+        </Hoverable>
+        <div className="relative">
+          <p className="text-[11px] font-medium tracking-[0.16em] text-fog uppercase">Qualidade do cadastro</p>
+          <p className="mt-2 font-display text-[28px] leading-tight font-semibold" style={{ color }}>
+            {verdict}
+          </p>
+          <p className="mt-2 text-[13.5px] text-fog">
+            <span className="num font-semibold text-snow">{formatNumber(complete)}</span> de <span className="num font-semibold text-snow">{formatNumber(total)}</span> registros sem nenhuma pendência
+          </p>
+        </div>
+      </section>
     </div>
   )
 }
@@ -622,7 +1301,11 @@ function IssueList({ title, hint, rows, onEdit, empty }: { title: string; hint: 
           {title}
         </span>
       }
-      aside={<span className="num text-sm font-semibold text-ink">{rows.length}</span>}
+      aside={
+        <span className={cn('num rounded-full px-2.5 py-0.5 text-sm font-semibold', rows.length ? 'bg-danger-soft text-danger' : 'bg-ok-soft text-ok')}>
+          <CountUp value={rows.length} />
+        </span>
+      }
       bodyClassName="p-0"
     >
       <p className="px-5 pt-3 text-[13px] text-steel">{rows.length ? hint : empty}</p>
@@ -655,13 +1338,22 @@ function Quality({ rows, routes, onEdit }: { rows: Row[]; routes: Route[]; onEdi
   const issues = new Set([...duplicates, ...noCity, ...noTransport].map(r => r.id)).size
   const score = rows.length ? Math.max(0, Math.round(100 - (issues / rows.length) * 100)) : 100
   const overbooked = routes.filter(r => r.capacity !== null && r.riders > r.capacity)
-  const summary: [string, number, string][] = [
-    ['Registros completos', rows.length - issues, 'text-ok'],
-    ['Nomes duplicados', duplicates.length, 'text-danger'],
-    ['Sem cidade', noCity.length, 'text-brand-ink'],
-    ['Sem transporte definido', noTransport.length, 'text-danger'],
-    ['Sem cargo cadastrado', noPosition.length, 'text-brand-ink'],
+  // Completude: dos campos que a mobilidade precisa, quantos estão preenchidos.
+  const fields: [string, (r: Row) => boolean][] = [
+    ['Cidade', r => Boolean(r.city)],
+    ['Transporte', r => r.mode !== null],
+    ['Cargo', r => Boolean(r.positionTitle)],
+    ['Departamento', r => Boolean(r.departmentName)],
+    ['Ponto de embarque', r => r.mode !== 'chartered' || Boolean(r.pickupPoint)],
+    ['Custo mensal', r => (r.mode !== 'chartered' && r.mode !== 'mobility') || r.monthlyCostCents !== null],
   ]
+  const missing = fields.map(([label, ok]) => ({ label, value: rows.filter(r => !ok(r)).length })).sort((a, b) => b.value - a.value)
+  const filled = rows.length ? 1 - missing.reduce((s, m) => s + m.value, 0) / (rows.length * fields.length) : 1
+  const openIssues = duplicates.length + noCity.length + noTransport.length + noPosition.length
+  const impact = rows.filter(
+    r => (r.status === 'on_leave' && (r.mode === 'chartered' || r.mode === 'mobility')) || (r.mode === 'chartered' && !r.pickupPoint) || (r.mode === 'mobility' && r.monthlyCostCents === null),
+  ).length
+  const worst = missing[0]!
   const more = [
     { title: 'Afastados com transporte ativo', hint: 'Afastados não deveriam consumir fretado nem crédito de mobilidade.', rows: rows.filter(r => r.status === 'on_leave' && (r.mode === 'chartered' || r.mode === 'mobility')) },
     { title: 'Fretado sem ponto de embarque', hint: 'O motorista não sabe onde buscar.', rows: rows.filter(r => r.mode === 'chartered' && !r.pickupPoint) },
@@ -669,16 +1361,51 @@ function Quality({ rows, routes, onEdit }: { rows: Row[]; routes: Route[]; onEdi
   ]
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-8 rounded-xl border border-line bg-paper p-6">
-        <ScoreRing score={score} />
-        <dl className="grid min-w-64 flex-1 gap-x-10 gap-y-1.5 sm:grid-cols-2">
-          {summary.map(([label, value, tone]) => (
-            <div key={label} className="flex justify-between border-b border-line py-1.5 text-sm">
-              <dt className="text-steel">{label}</dt>
-              <dd className={cn('num font-semibold', tone)}>{formatNumber(value)}</dd>
-            </div>
-          ))}
-        </dl>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <ScoreHero
+          score={score}
+          complete={rows.length - issues}
+          total={rows.length}
+          details={{
+            title: 'Como a nota é calculada',
+            rows: [
+              { label: 'Registros sem pendência', value: formatNumber(rows.length - issues), share: rows.length ? (rows.length - issues) / rows.length : 1, color: 'var(--color-ok)', tone: 'ok' },
+              { label: 'Com alguma pendência', value: formatNumber(issues), share: rows.length ? issues / rows.length : 0, color: 'var(--color-danger)', tone: issues ? 'danger' : 'ok' },
+            ],
+            hint: 'Pendência = nome duplicado, sem cidade ou sem transporte. 85% ou mais é confiável; abaixo de 65%, crítico.',
+          }}
+        />
+        <SpotlightGrid className="grid gap-4 sm:grid-cols-2">
+          <KpiCard
+            icon={CheckCircle2}
+            tone={filled >= 0.95 ? 'ok' : 'warn'}
+            label="Completude dos campos" details={{ title: 'Preenchimento de cada campo', rows: [...missing].reverse().map(m => ({ label: m.label, value: pct(rows.length - m.value, rows.length), share: rows.length ? (rows.length - m.value) / rows.length : 1, color: m.value ? 'var(--color-brand)' : 'var(--color-ok)', tone: m.value ? undefined : ('ok' as const) })) }}
+            value={<CountUp value={filled * 100} format={percentFormat} />}
+            note={`${fields.length} campos que a mobilidade usa, em ${formatNumber(rows.length)} registros`}
+            aside={<Ring value={filled} size={58} thickness={7} track="var(--color-sunken)" color="var(--color-ok)" />}
+          />
+          <KpiCard
+            icon={openIssues ? AlertTriangle : CheckCircle2}
+            tone={openIssues ? 'danger' : 'ok'}
+            label="Pendências em aberto" details={{ title: 'Pendências por tipo', rows: [{ label: 'Nomes duplicados', value: formatNumber(duplicates.length) }, { label: 'Sem cidade', value: formatNumber(noCity.length) }, { label: 'Sem transporte', value: formatNumber(noTransport.length) }, { label: 'Sem cargo', value: formatNumber(noPosition.length) }].map(d => ({ ...d, tone: d.value === '0' ? ('ok' as const) : ('danger' as const) })) }}
+            value={<CountUp value={openIssues} />}
+            note={openIssues ? 'Duplicados, sem cidade, sem transporte ou sem cargo' : 'Nada a corrigir'}
+          />
+          <KpiCard
+            icon={Wallet}
+            tone={impact ? 'danger' : 'ok'}
+            label="Afetam custo ou operação" details={{ title: 'O que pesa no bolso ou na rota', rows: [{ label: 'Afastado com transporte ativo', value: formatNumber(rows.filter(r => r.status === 'on_leave' && (r.mode === 'chartered' || r.mode === 'mobility')).length) }, { label: 'Fretado sem ponto de embarque', value: formatNumber(rows.filter(r => r.mode === 'chartered' && !r.pickupPoint).length) }, { label: 'Mobilidade sem valor', value: formatNumber(rows.filter(r => r.mode === 'mobility' && r.monthlyCostCents === null).length) }].map(d => ({ ...d, tone: d.value === '0' ? ('ok' as const) : ('danger' as const) })) }}
+            value={<CountUp value={impact} />}
+            note={impact ? 'Afastado com transporte, fretado sem ponto ou mobilidade sem valor' : 'Nenhum problema com impacto direto'}
+          />
+          <KpiCard
+            icon={MapPin}
+            tone={worst.value ? 'warn' : 'ok'}
+            label="Campo mais incompleto" details={{ title: 'Faltando em cada campo', rows: missing.map(m => ({ label: m.label, value: formatNumber(m.value), share: rows.length ? m.value / rows.length : 0, color: 'var(--color-danger)', tone: m.value ? ('danger' as const) : ('ok' as const) })) }}
+            value={worst.value ? <CountUp value={worst.value} /> : '—'}
+            note={worst.value ? `${worst.label} falta em ${pct(worst.value, rows.length)} dos registros` : 'Todos os campos preenchidos'}
+          />
+        </SpotlightGrid>
       </div>
       {overbooked.length > 0 && (
         <p className="flex flex-wrap items-center gap-2 rounded-xl border border-danger/25 bg-danger-soft px-4 py-3 text-sm text-danger">
@@ -738,6 +1465,7 @@ function Routes({ routes, rows }: { routes: Route[]; rows: Row[] }) {
             return (
               <Panel
                 key={r.id}
+                className="overflow-visible"
                 title={r.name}
                 aside={
                   manage && (
@@ -757,12 +1485,35 @@ function Routes({ routes, rows }: { routes: Route[]; rows: Row[] }) {
                   )
                 }
               >
-                <p className={cn('num font-display text-4xl font-semibold', over ? 'text-danger' : 'text-ink')}>
-                  {r.riders}
-                  <span className="text-xl text-steel">/{r.capacity ?? '—'}</span>
-                </p>
-                <p className="mt-1 text-sm text-steel">{[r.vehicle, r.shift, r.driver].filter(Boolean).join(' · ') || 'Sem veículo informado'}</p>
-                {over && <Badge tone="danger">Acima da capacidade</Badge>}
+                <Hoverable
+                  details={{
+                    title: 'Embarque por ponto',
+                    rows: [
+                      ...topRows(countBy(riders, p => [p.pickupPoint, p.pickupDistrict].filter(Boolean).join(', ') || 'Ponto não informado'), riders.length, 5, 'var(--color-brand)'),
+                      { label: 'Custo mensal da rota', value: money(sumCost(riders)) },
+                      ...(r.capacity ? [{ label: 'Custo por lugar ofertado', value: money(Math.round(sumCost(riders) / r.capacity)) }] : []),
+                    ],
+                  }}
+                >
+                <div tabIndex={0} className="-m-2 flex cursor-default items-center gap-4 rounded-lg p-2 outline-none transition-colors hover:bg-sunken focus-visible:bg-sunken">
+                  <Ring value={r.capacity ? r.riders / r.capacity : 0} size={76} thickness={8} track="var(--color-sunken)" color={over ? 'var(--color-danger)' : 'var(--color-brand)'}>
+                    <span className="num text-[15px] font-semibold text-ink">{r.capacity ? pct(r.riders, r.capacity) : '—'}</span>
+                  </Ring>
+                  <div className="min-w-0">
+                    <p className={cn('num font-display text-4xl leading-none font-semibold', over ? 'text-danger' : 'text-ink')}>
+                      <CountUp value={r.riders} />
+                      <span className="text-xl text-steel">/{r.capacity ?? '—'}</span>
+                    </p>
+                    <span className="mt-2 inline-block">
+                      <Badge tone={routeStatus(r.riders, r.capacity).tone}>
+                        {routeStatus(r.riders, r.capacity).label}
+                        {r.capacity && !over ? ` · ${r.capacity - r.riders} livres` : ''}
+                      </Badge>
+                    </span>
+                  </div>
+                </div>
+                </Hoverable>
+                <p className="mt-3 text-sm text-steel">{[r.vehicle, r.shift, r.driver && `Motorista: ${r.driver}`].filter(Boolean).join(' · ') || 'Sem veículo informado'}</p>
                 {riders.length > 0 && (
                   <ul className="mt-3 max-h-48 divide-y divide-line overflow-y-auto border-t border-line text-sm">
                     {riders.map(p => (
@@ -845,7 +1596,8 @@ function TransportDrawer({ row, routes, onClose }: { row: BoardRow; routes: Rout
   const queryClient = useQueryClient()
   const [form, setForm] = useState({
     mode: row.mode ?? 'mobility',
-    provider: row.provider ?? '',
+    // Mobilidade da Falcão é pelo Caju (mesmo cartão de alimentação e refeição).
+    provider: row.provider ?? (row.mode === null || row.mode === 'mobility' ? 'Caju' : ''),
     routeId: row.routeId ?? '',
     pickupPoint: row.pickupPoint ?? '',
     pickupDistrict: row.pickupDistrict ?? '',
@@ -933,7 +1685,7 @@ function TransportDrawer({ row, routes, onClose }: { row: BoardRow; routes: Rout
           </Field>
         )}
         {form.mode === 'mobility' && (
-          <Field label="Fornecedor do cartão ou app">{props => <Input {...props} value={form.provider} onChange={set('provider')} />}</Field>
+          <Field label="Fornecedor do cartão ou app">{props => <Input {...props} placeholder="Caju" value={form.provider} onChange={set('provider')} />}</Field>
         )}
         {(form.mode === 'mobility' || form.mode === 'chartered') && (
           <Field label="Custo mensal (R$)">
@@ -956,86 +1708,3 @@ function TransportDrawer({ row, routes, onClose }: { row: BoardRow; routes: Rout
     </Drawer>
   )
 }
-
-// ---------- importação ----------
-
-type ImportResult = { rows: { line: number; registration: string; fullName: string; errors: string[] }[]; total: number; failed: number; imported: number }
-
-function ImportPanel() {
-  const queryClient = useQueryClient()
-  const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<ImportResult | null>(null)
-  const send = useMutation({
-    mutationFn: (commit: boolean) => apiUpload<ImportResult>(`/transport/import?commit=${commit}`, {}, file!),
-    onSuccess: (result, commit) => {
-      setPreview(result)
-      if (commit && result.imported) {
-        toast.success(`${result.imported} cadastros de transporte atualizados.`)
-        void queryClient.invalidateQueries({ queryKey: ['transport-board'] })
-        void queryClient.invalidateQueries({ queryKey: ['transport-routes'] })
-        setFile(null)
-      }
-    },
-    onError: fail('Não foi possível importar.'),
-  })
-  return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-      <Panel title="Atualizar por planilha">
-        <ol className="mb-4 list-decimal space-y-1 pl-5 text-sm text-ink-soft">
-          <li>Baixe a planilha atual em “Exportar planilha”.</li>
-          <li>Ajuste modalidade, rota, embarque e custo. A matrícula identifica a pessoa.</li>
-          <li>Envie de volta: primeiro conferimos, depois gravamos.</li>
-        </ol>
-        <FileInput
-          file={file}
-          onChange={f => {
-            setFile(f)
-            setPreview(null)
-          }}
-          accept=".xlsx,.csv"
-          hint="Planilha .xlsx ou .csv, no formato da exportação."
-        />
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button disabled={!file} loading={send.isPending && !send.variables} onClick={() => send.mutate(false)}>
-            <FileSpreadsheet className="size-4" aria-hidden /> Conferir
-          </Button>
-          <Button
-            variant="primary"
-            disabled={!file || !preview || preview.failed > 0 || preview.imported > 0}
-            loading={send.isPending && send.variables}
-            onClick={() => send.mutate(true)}
-          >
-            <Upload className="size-4" aria-hidden /> Gravar {preview && !preview.failed ? `${preview.total} linhas` : ''}
-          </Button>
-        </div>
-      </Panel>
-      <Panel title="Resultado">
-        {!preview ? (
-          <p className="text-sm text-steel">Envie uma planilha para conferir antes de gravar.</p>
-        ) : (
-          <>
-            <p className="mb-3 text-sm">
-              <span className="num font-semibold text-ink">{preview.total}</span> linhas ·{' '}
-              <span className={cn('num font-semibold', preview.failed ? 'text-danger' : 'text-ok')}>{preview.failed}</span> com erro
-              {preview.imported > 0 && <span className="text-ok"> · {preview.imported} gravadas</span>}
-            </p>
-            <ul className="max-h-96 divide-y divide-line overflow-y-auto rounded-sm border border-line text-sm">
-              {preview.rows
-                .filter(r => r.errors.length)
-                .map(r => (
-                  <li key={r.line} className="px-3 py-2">
-                    <span className="font-medium text-ink">
-                      Linha {r.line}: {r.fullName || r.registration || 'sem matrícula'}
-                    </span>
-                    <span className="block text-danger">{r.errors.join(' ')}</span>
-                  </li>
-                ))}
-              {preview.failed === 0 && <li className="px-3 py-2 text-ok">Tudo certo para gravar.</li>}
-            </ul>
-          </>
-        )}
-      </Panel>
-    </div>
-  )
-}
-
