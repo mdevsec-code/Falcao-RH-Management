@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { isValidCpf, onlyDigits } from './cpf'
+import { foreignProcessFields } from './foreign'
 import { CONTRACT_TYPES, uuid } from './schemas'
 
 // ---------- situação e etapas do funil ----------
@@ -215,6 +216,8 @@ export const foreignCandidate = z.object({
   visaType: z.string().trim().max(60).default(''),
   visaExpiresAt: z.iso.date().nullable().default(null),
   languages: z.string().trim().max(160).default(''),
+  // Etapas e datas do processo migratório (aba Estrangeiros).
+  ...foreignProcessFields,
 })
 export type ForeignCandidate = z.infer<typeof foreignCandidate>
 export const candidateForeignUpdate = z.object({ foreign: foreignCandidate.nullable() })

@@ -10,7 +10,7 @@ import { DataTable } from '../components/ui/data-table'
 import { Drawer } from '../components/ui/drawer'
 import { Field, Input, Select } from '../components/ui/field'
 import { FileInput, formatBytes } from '../components/ui/file-input'
-import { Badge, Skeleton } from '../components/ui/layout'
+import { Badge, SkeletonPanel } from '../components/ui/layout'
 import { api, ApiError, apiUpload, openDownload } from '../lib/api'
 import { formatDate, todayIso } from '../lib/format'
 import { useCan } from '../lib/session'
@@ -169,7 +169,7 @@ export function DocumentDrawer({ id, onClose }: { id: string | null; onClose: ()
         )
       }
     >
-      {query.isPending && <Skeleton className="h-60" />}
+      {query.isPending && <SkeletonPanel rows={4} />}
       {doc && (
         <div className="flex flex-col gap-6">
           {doc.sensitive && (

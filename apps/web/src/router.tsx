@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { can, EMPLOYEE_STATUSES, type Permission } from '@falcao-rh/contracts'
 
 import { AppShell } from './components/app-shell'
-import { ErrorState, Skeleton } from './components/ui/layout'
+import { ErrorState, Skeleton, SkeletonGroup, SkeletonKpis, SkeletonPanel } from './components/ui/layout'
 import { ApiError } from './lib/api'
 import { meQuery, queryClient } from './lib/queries'
 import { LoginPage } from './pages/login'
@@ -166,6 +166,13 @@ const talentPoolRoute = createRoute({
   component: lazyRouteComponent(() => import('./pages/talent-pool'), 'TalentPoolPage'),
 })
 
+const foreignWorkersRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/recrutamento/estrangeiros',
+  beforeLoad: guard('talent_pool.read'),
+  component: lazyRouteComponent(() => import('./pages/foreign-workers'), 'ForeignWorkersPage'),
+})
+
 /** Admissão digital: pública, o novo colaborador entra só com o link. */
 const admissionRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -255,6 +262,7 @@ const routeTree = rootRoute.addChildren([
     recruitmentRoute,
     careersEditorRoute,
     talentPoolRoute,
+    foreignWorkersRoute,
     mobilityRoute,
     benefitsRoute,
     recruitmentInsightsRoute,
@@ -272,17 +280,13 @@ const routeTree = rootRoute.addChildren([
 /** Enquanto a tela é baixada: a moldura da página, nunca um vazio. */
 function PagePending() {
   return (
-    <div className="flex flex-col gap-5" role="status" aria-label="Carregando">
+    <SkeletonGroup className="flex flex-col gap-5">
       <Skeleton className="h-3 w-32 rounded-full" />
       <Skeleton className="h-12 w-72" />
       <Skeleton className="h-4 w-96 max-w-full rounded-full" />
-      <div className="mt-3 grid gap-5 md:grid-cols-3">
-        <Skeleton className="h-36" />
-        <Skeleton className="h-36" />
-        <Skeleton className="h-36" />
-      </div>
-      <Skeleton className="h-64" />
-    </div>
+      <SkeletonKpis count={3} className="mt-3 grid gap-5 md:grid-cols-3" />
+      <SkeletonPanel rows={4} index={3} />
+    </SkeletonGroup>
   )
 }
 

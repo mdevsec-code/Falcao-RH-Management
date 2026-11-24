@@ -9,7 +9,7 @@ import { formatCpf } from '@falcao-rh/contracts'
 import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
 import { Textarea } from '../components/ui/field'
-import { Avatar, Badge, Skeleton } from '../components/ui/layout'
+import { Avatar, Badge, SkeletonForm } from '../components/ui/layout'
 import { api, ApiError, openDownload } from '../lib/api'
 import { cn } from '../lib/cn'
 import { displayCpf, todayIso } from '../lib/format'
@@ -146,7 +146,7 @@ export function CandidateDrawer({ id, stages, job, onClose }: { id: string | nul
       description={a ? `${a.jobTitle} · candidatou-se em ${when(a.createdAt)}` : undefined}
     >
       {!a ? (
-        <Skeleton className="h-96" />
+        <SkeletonForm fields={6} />
       ) : (
         <div className="flex flex-col gap-6">
           <div className="flex flex-wrap items-center gap-4">

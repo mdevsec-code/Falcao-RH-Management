@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ElementType, type ReactNode, type Ref
 
 import { cn } from '../lib/cn'
 import { Flip, gsap, MOTION, reducedMotion, ScrollTrigger, splitTitle, TITLE_HIDDEN_Y, useGSAP } from '../lib/gsap'
+import { useT } from '../lib/i18n'
 
 /** Número que conta até o valor; anima de novo quando o valor muda. */
 export function CountUp({
@@ -60,6 +61,8 @@ export function SplitTitle({
   delay?: number
 }) {
   const ref = useRef<HTMLElement>(null)
+  // Traduz antes de quebrar em letras: depois disso o tradutor de tela não reconhece o texto.
+  const text = useT(children)
   useGSAP(
     () => {
       const mm = gsap.matchMedia()
@@ -69,12 +72,12 @@ export function SplitTitle({
         return () => split.revert()
       })
     },
-    { dependencies: [children], scope: ref },
+    { dependencies: [text], scope: ref },
   )
   return (
     // `key`: texto novo remonta o elemento; o SplitText anterior restauraria o texto antigo.
-    <Tag key={children} ref={ref} className={className}>
-      {children}
+    <Tag key={text} ref={ref} className={className}>
+      {text}
     </Tag>
   )
 }

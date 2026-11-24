@@ -8,7 +8,7 @@ import type { ForeignCandidate } from '@falcao-rh/contracts'
 import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
 import { Input, Select } from '../components/ui/field'
-import { Avatar, Badge, Skeleton } from '../components/ui/layout'
+import { Avatar, Badge, SkeletonForm } from '../components/ui/layout'
 import { api, ApiError, openDownload } from '../lib/api'
 import { displayCpf, formatDate } from '../lib/format'
 import { useCan } from '../lib/session'
@@ -90,7 +90,7 @@ export function TalentDrawer({ id, onClose, onMerged }: { id: string | null; onC
       description={c ? `${c.applications.length === 1 ? '1 candidatura' : `${c.applications.length} candidaturas`}${c.invitedAt ? ` · convidado em ${dateBr(c.invitedAt)}` : ''}` : undefined}
     >
       {!c ? (
-        <Skeleton className="h-96" />
+        <SkeletonForm fields={6} />
       ) : (
         <div className="flex flex-col gap-6">
           <div className="flex items-center gap-4">
@@ -248,7 +248,20 @@ export function TalentDrawer({ id, onClose, onMerged }: { id: string | null; onC
   )
 }
 
-const EMPTY_FOREIGN: ForeignCandidate = { nationality: '', passport: '', rnm: '', visaType: '', visaExpiresAt: null, languages: '' }
+const EMPTY_FOREIGN: ForeignCandidate = {
+  nationality: '',
+  passport: '',
+  rnm: '',
+  visaType: '',
+  visaExpiresAt: null,
+  languages: '',
+  consulate: '',
+  regulatedProfession: false,
+  authorizationPublishedAt: null,
+  arrivalDate: null,
+  rnmAppointmentAt: null,
+  steps: {},
+}
 
 /** Estrangeiro: nacionalidade e documentos de migração que o RH confere antes de contratar. */
 function ForeignSection({ candidate, canManage, onSaved }: { candidate: CandidateDetail; canManage: boolean; onSaved: () => Promise<unknown> }) {

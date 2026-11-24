@@ -44,6 +44,7 @@ Verificação: 102 testes de unidade e integração (PostgreSQL real em memória
 | Painel de R&S: funil, recusas por etapa, conversão, dias até contratar | Entregue (RH e administração) |
 | Admissão digital: link de uso único para o novo colaborador enviar dados e documentos | Entregue; documentos caem em "Documentos admissionais" |
 | Candidatos estrangeiros: nacionalidade, passaporte, RNM e visto | Entregue no banco de talentos |
+| Aba Estrangeiros: triagem migratória (documentos apostilados, autorização no MigranteWeb/MJSP, visto VITEM V, RNM em 90 dias, admissão, conformidade) com prazos e alertas | Entregue; etapas ficam nos dados de migração do candidato (sem tabela nova) |
 | Mobilidade e transporte: fretado com ocupação, mobilidade, cidades, qualidade dos dados, planilha | Entregue |
 | Benefícios VA/VR: planos com histórico de valores, benefício de cada pessoa, apuração mensal com ajuste e fechamento, planilha | Entregue; regra padrão de dias úteis (seg. a sex.) menos férias e ausências aprovadas |
 

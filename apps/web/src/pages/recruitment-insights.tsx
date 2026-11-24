@@ -6,7 +6,7 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 
 import { CountUp } from '../components/motion'
 import { Select } from '../components/ui/field'
-import { EmptyState, ErrorState, PageHeader, Panel, Skeleton } from '../components/ui/layout'
+import { EmptyState, ErrorState, PageHeader, Panel, SkeletonKpis, SkeletonPanel } from '../components/ui/layout'
 import { api } from '../lib/api'
 import { cn } from '../lib/cn'
 import { formatDate, formatMonth } from '../lib/format'
@@ -81,8 +81,8 @@ export function RecruitmentInsightsPage() {
       {!data ? (
         query.isPending && (
           <div className="flex flex-col gap-6">
-            <Skeleton className="h-40" />
-            <Skeleton className="h-80" />
+            <SkeletonKpis />
+            <SkeletonPanel chart index={4} />
           </div>
         )
       ) : (

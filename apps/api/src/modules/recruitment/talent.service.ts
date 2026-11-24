@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, ilike, inArray, ne, or, sql, type SQL } from 'drizzle-orm'
 
-import type { CandidateFilters, ForeignCandidate } from '@falcao-rh/contracts'
+import { foreignCandidate, type CandidateFilters, type ForeignCandidate } from '@falcao-rh/contracts'
 
 import type { Tx } from '../../db/client'
 import {
@@ -162,6 +162,32 @@ export const updateCandidateTags = async (tx: Tx, ctx: Ctx, id: string, tags: st
   await tx.update(candidates).set({ tags: unique }).where(eq(candidates.id, id))
   await audit(tx, ctx, { action: 'candidate.tags_updated', entity: 'candidate', entityId: id })
   return { id, tags: unique }
+}
+
+/** Estrangeiros em processo (aba Estrangeiros): ficha, dados de migração e a vaga mais recente. */
+export const listForeignCandidates = async (tx: Tx) => {
+  const latest = (column: SQL) => sql<string | null>`(
+    select ${column} from applications a
+    join job_openings j on j.id = a.job_id
+    left join recruitment_stages s on s.id = a.stage_id
+    where a.candidate_id = candidates.id order by a.created_at desc limit 1)`
+  const rows = await tx
+    .select({
+      id: candidates.id,
+      fullName: candidates.fullName,
+      email: candidates.email,
+      phone: candidates.phone,
+      city: candidates.city,
+      state: candidates.state,
+      foreign: candidates.foreign,
+      jobTitle: latest(sql`j.title`),
+      stage: latest(sql`coalesce(s.name, a.status::text)`),
+    })
+    .from(candidates)
+    .where(sql`${candidates.foreign} is not null`)
+    .orderBy(asc(candidates.fullName))
+  // Fichas gravadas antes das etapas existirem ganham os padrões (etapas vazias).
+  return rows.map(row => ({ ...row, foreign: foreignCandidate.parse(row.foreign) }))
 }
 
 export const updateCandidateForeign = async (tx: Tx, ctx: Ctx, id: string, foreign: ForeignCandidate | null) => {

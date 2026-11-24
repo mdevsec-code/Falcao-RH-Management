@@ -8,7 +8,7 @@ import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
 import { Field, Input, Select } from '../components/ui/field'
 import { TableFrame, TableSkeleton, thClass, trClass } from '../components/ui/data-table'
-import { Avatar, EmptyState, ErrorState, PageHeader, Skeleton } from '../components/ui/layout'
+import { Avatar, EmptyState, ErrorState, PageHeader, SkeletonPanel } from '../components/ui/layout'
 import { TabList, Tabs } from '../components/ui/tabs'
 import { gsap, MOTION, useGSAP } from '../lib/gsap'
 import { api, ApiError } from '../lib/api'
@@ -105,7 +105,7 @@ function OrgChart() {
   const tree = useMemo(() => buildTree(query.data ?? []), [query.data])
 
   if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />
-  if (query.isPending) return <Skeleton className="h-64" />
+  if (query.isPending) return <SkeletonPanel rows={5} />
   if (tree.length === 0)
     return (
       <div className="surface">

@@ -21,11 +21,12 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 
 import { CountUp, Sparkline, SpotlightGlow, useSpotlight, useTilt } from '../components/motion'
 import { Select } from '../components/ui/field'
-import { Avatar, EmptyState, ErrorState, PageHeader, Panel, Segmented, Skeleton } from '../components/ui/layout'
+import { Avatar, EmptyState, ErrorState, PageHeader, Panel, Segmented, SkeletonHero, SkeletonKpis, SkeletonPanel } from '../components/ui/layout'
 import { api } from '../lib/api'
 import { cn } from '../lib/cn'
 import { EVENT_LABELS, formatDate, formatMonth, todayIso } from '../lib/format'
 import { gsap, MOTION, reducedMotion, useGSAP } from '../lib/gsap'
+import { LANGS, useLang } from '../lib/i18n'
 import { orgQueries } from '../lib/queries'
 import { useCan, useMe } from '../lib/session'
 import type { Dashboard } from '../lib/types'
@@ -43,10 +44,11 @@ const greeting = () => {
   const hour = new Date().getHours()
   return hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite'
 }
-const today = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
-
 export function DashboardPage() {
   const me = useMe()
+  // Data por extenso no idioma escolhido (o tradutor de tela não traduz datas).
+  const lang = useLang()
+  const today = new Date().toLocaleDateString(LANGS.find(l => l.key === lang)!.html, { weekday: 'long', day: 'numeric', month: 'long' })
   const [period, setPeriod] = useState<keyof typeof PERIODS>('12m')
   const [departmentId, setDepartmentId] = useState('')
   const [unitId, setUnitId] = useState('')
@@ -498,18 +500,14 @@ function DashboardSkeleton() {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-6 xl:grid-cols-[5fr_7fr]">
-        <Skeleton className="h-[300px] rounded-xl" />
-        <div className="grid gap-4 sm:grid-cols-2">
-          {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} className="h-36" />
-          ))}
-        </div>
+        <SkeletonHero className="min-h-[300px]" />
+        <SkeletonKpis className="grid gap-4 sm:grid-cols-2" />
       </div>
       <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-        <Skeleton className="h-80" />
-        <Skeleton className="h-80" />
+        <SkeletonPanel chart index={4} />
+        <SkeletonPanel rows={5} index={5} />
       </div>
-      <Skeleton className="h-56" />
+      <SkeletonPanel rows={3} index={6} />
     </div>
   )
 }

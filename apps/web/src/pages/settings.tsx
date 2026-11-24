@@ -17,7 +17,7 @@ import {
 
 import { Button } from '../components/ui/button'
 import { CheckCard, Field, Input, Select } from '../components/ui/field'
-import { Badge, PageHeader, Panel, Skeleton } from '../components/ui/layout'
+import { Badge, PageHeader, Panel, SkeletonForm } from '../components/ui/layout'
 import { api, ApiError } from '../lib/api'
 import { orgQueries } from '../lib/queries'
 import type { ApprovalFlow, OrgSettings } from '../lib/types'
@@ -53,7 +53,7 @@ function OrganizationPanel() {
     },
     onError: error => toast.error(error instanceof ApiError ? error.message : 'Não foi possível salvar.'),
   })
-  if (!form) return <Skeleton className="h-96" />
+  if (!form) return <SkeletonForm fields={8} />
   const toggleRole = (role: Role) =>
     setForm({ ...form, requireMfaFor: form.requireMfaFor.includes(role) ? form.requireMfaFor.filter(r => r !== role) : [...form.requireMfaFor, role] })
   const submit = (event: FormEvent) => {

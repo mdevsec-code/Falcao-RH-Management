@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
-import { Bell, BellOff, ChevronRight, ChevronsUpDown, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, UserCog, X } from 'lucide-react'
+import { Bell, BellOff, Check, ChevronRight, ChevronsUpDown, Languages, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, UserCog, X } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 
 import { can, ROLE_LABELS } from '@falcao-rh/contracts'
@@ -11,6 +11,7 @@ import { api, tenantStore } from '../lib/api'
 import { authClient } from '../lib/auth-client'
 import { cn } from '../lib/cn'
 import { gsap, MOTION, reducedMotion, useGSAP } from '../lib/gsap'
+import { LANGS, setLang, useLang, useScreenTranslator, type Lang } from '../lib/i18n'
 import { useMe } from '../lib/session'
 import { toggleTheme, useTheme } from '../lib/theme'
 import type { AppNotification } from '../lib/types'
@@ -26,17 +27,18 @@ const COLLAPSE_KEY = 'falcao-rh:sidebar'
 
 function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
-    <Link to="/" className={cn('group flex items-center gap-3 pt-7 pb-7', collapsed ? 'justify-center px-0' : 'px-6')} aria-label="Falcão RH, início">
+    // Faixa branca fixa (também no tema escuro) para destacar a logo; o resto do menu segue escuro.
+    <Link to="/" className={cn('group mb-5 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-white', collapsed ? 'justify-center px-0' : 'px-6')} aria-label="Falcão RH, início">
       <span className="relative flex size-10 shrink-0 items-center justify-center">
         <span className="absolute inset-0 rounded-[11px] bg-brand/10 opacity-0 blur-md transition-opacity duration-500 group-hover:opacity-100" />
         <img src={falcon} alt="" className="relative h-9 w-auto transition-transform duration-500 ease-[var(--ease-falcon)] group-hover:-rotate-6 group-hover:scale-105" />
       </span>
       {!collapsed && (
         <span className="leading-none">
-          <span className="block font-display text-[26px] font-semibold tracking-[-0.01em] text-snow">
-            Falcão <span className="text-brand">RH</span>
+          <span className="block font-display text-[26px] font-semibold tracking-[-0.01em] text-night">
+            Falcão <span className="text-[#e8ac00]">RH</span>
           </span>
-          <span className="mt-1 block text-[10.5px] font-medium tracking-[0.18em] text-fog/70 uppercase">Gestão de pessoas</span>
+          <span className="mt-1 block text-[10.5px] font-medium tracking-[0.18em] text-[#5d5e64] uppercase">Gestão de pessoas</span>
         </span>
       )}
     </Link>
@@ -483,8 +485,43 @@ function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   )
 }
 
+/** Idioma das telas internas: os nomes ficam no próprio idioma e não são traduzidos. */
+function LanguageMenu() {
+  const lang = useLang()
+  const current = LANGS.find(l => l.key === lang)!
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger className={cn(iconButton, 'w-auto gap-1.5 px-2.5 text-[12.5px] font-semibold')} aria-label="Idioma" data-no-translate>
+        <Languages className="size-[18px]" aria-hidden />
+        {current.short}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content align="end" sideOffset={10} className="pop z-50 min-w-44 rounded-lg border border-line bg-paper p-1.5 text-sm shadow-pop" data-no-translate>
+          <DropdownMenu.RadioGroup value={lang} onValueChange={v => setLang(v as Lang)}>
+            {LANGS.map(l => (
+              <DropdownMenu.RadioItem
+                key={l.key}
+                value={l.key}
+                lang={l.html}
+                className="flex cursor-pointer items-center gap-2.5 rounded-sm px-3 py-2 outline-none transition-colors data-[highlighted]:bg-sunken"
+              >
+                <span className="num w-8 text-[11.5px] font-semibold text-steel">{l.short}</span>
+                <span className="flex-1 text-ink">{l.label}</span>
+                <DropdownMenu.ItemIndicator>
+                  <Check className="size-4 text-ok" aria-hidden />
+                </DropdownMenu.ItemIndicator>
+              </DropdownMenu.RadioItem>
+            ))}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  )
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const path = usePath()
+  useScreenTranslator()
   const [menuOpen, setMenuOpen] = useState(false)
   const [palette, setPalette] = useState(false)
   const [collapsed, setCollapsed] = useState(() => {
@@ -541,6 +578,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Breadcrumb />
           <PaletteTrigger onOpen={() => setPalette(true)} />
           <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            <LanguageMenu />
             <ThemeToggle />
             <Notifications />
             <span className="mx-2 hidden h-6 w-px bg-line sm:block" aria-hidden />

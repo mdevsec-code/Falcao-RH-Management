@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 
 import { Button } from '../components/ui/button'
 import { Field, Input } from '../components/ui/field'
-import { Badge, PageHeader, Panel, Skeleton } from '../components/ui/layout'
+import { Badge, PageHeader, Panel, SkeletonForm, SkeletonText } from '../components/ui/layout'
 import { authClient } from '../lib/auth-client'
 import { meQuery } from '../lib/queries'
 import { useMe } from '../lib/session'
@@ -83,7 +83,7 @@ function TwoFactorPanel() {
     start.mutate()
   }
 
-  if (session.isPending) return <Skeleton className="h-64" />
+  if (session.isPending) return <SkeletonForm fields={4} />
 
   return (
     <Panel
@@ -267,7 +267,7 @@ function SessionsPanel() {
       bodyClassName="p-0"
     >
       {sessions.isPending ? (
-        <Skeleton className="m-5 h-24" />
+        <SkeletonText lines={3} className="p-5" />
       ) : (
         <ul className="divide-y divide-line">
           {list.map(item => {

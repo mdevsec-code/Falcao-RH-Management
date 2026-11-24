@@ -9,7 +9,7 @@ import { EMPLOYEE_STATUSES } from '@falcao-rh/contracts'
 import { Button } from '../components/ui/button'
 import { Drawer } from '../components/ui/drawer'
 import { Field, Input, Select, Textarea } from '../components/ui/field'
-import { ErrorState, Panel, Skeleton } from '../components/ui/layout'
+import { ErrorState, Panel, SkeletonHero, SkeletonPanel } from '../components/ui/layout'
 import { TabList, Tabs } from '../components/ui/tabs'
 import { EmployeeForm } from '../features/employee-form'
 import { DataTable } from '../components/ui/data-table'
@@ -68,8 +68,8 @@ export function EmployeeDetailPage() {
       {query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
       {query.isPending && (
         <div className="flex flex-col gap-5">
-          <Skeleton className="h-60 rounded-xl" />
-          <Skeleton className="h-72" />
+          <SkeletonHero className="min-h-[240px]" />
+          <SkeletonPanel rows={6} index={1} />
         </div>
       )}
 

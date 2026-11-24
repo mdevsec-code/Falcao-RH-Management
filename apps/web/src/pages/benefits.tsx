@@ -20,7 +20,7 @@ import { Button } from '../components/ui/button'
 import { DataTable } from '../components/ui/data-table'
 import { Drawer } from '../components/ui/drawer'
 import { Field, Input, Select } from '../components/ui/field'
-import { Badge, EmptyState, ErrorState, PageHeader, Panel, Skeleton } from '../components/ui/layout'
+import { Badge, EmptyState, ErrorState, PageHeader, Panel, SkeletonPanel } from '../components/ui/layout'
 import { api, ApiError, apiDownload } from '../lib/api'
 import { cn } from '../lib/cn'
 import { formatDate, formatMonth, todayIso } from '../lib/format'
@@ -238,7 +238,7 @@ function RunView({ id, onBack }: { id: string; onBack: () => void }) {
   }
 
   if (run.isError) return <ErrorState error={run.error} onRetry={() => run.refetch()} />
-  if (!run.data) return <Skeleton className="h-96" />
+  if (!run.data) return <SkeletonPanel rows={7} />
   const r = run.data
   const draft = r.status === 'draft'
   const items = r.items.filter(i => !q.trim() || `${i.fullName} ${i.registration}`.toLowerCase().includes(q.trim().toLowerCase()))
@@ -543,7 +543,7 @@ function Plans() {
   const [valuing, setValuing] = useState<Plan | null>(null)
 
   if (plans.isError) return <ErrorState error={plans.error} onRetry={() => plans.refetch()} />
-  if (plans.isPending) return <Skeleton className="h-64" />
+  if (plans.isPending) return <SkeletonPanel rows={4} />
   return (
     <div className="flex flex-col gap-4">
       {manage && (

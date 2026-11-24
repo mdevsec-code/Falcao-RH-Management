@@ -4,7 +4,7 @@ import { useDeferredValue, useState } from 'react'
 
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/field'
-import { Avatar, Badge, EmptyState, ErrorState, PageHeader, Skeleton } from '../components/ui/layout'
+import { Avatar, Badge, EmptyState, ErrorState, PageHeader, SkeletonList } from '../components/ui/layout'
 import { TalentDrawer } from '../features/talent-drawer'
 import { api } from '../lib/api'
 import { cn } from '../lib/cn'
@@ -80,11 +80,7 @@ export function TalentPoolPage() {
       {query.isError ? (
         <ErrorState error={query.error} onRetry={() => query.refetch()} />
       ) : !data ? (
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: 6 }, (_, i) => (
-            <Skeleton key={i} className="h-20 rounded-lg" />
-          ))}
-        </div>
+        <SkeletonList rows={6} />
       ) : data.items.length === 0 ? (
         <div className="surface">
           <EmptyState icon={filtering ? SearchX : Contact} title={filtering ? 'Ninguém com esses filtros' : 'O banco de talentos ainda está vazio'}>

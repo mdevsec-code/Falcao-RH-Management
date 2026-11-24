@@ -6,7 +6,7 @@ import { candidateFilters, candidateForeignUpdate, candidateInvite, candidateMer
 import type { AppDeps } from '../../app'
 import { ctxOf, requirePermission, tenantTx } from '../../http/context'
 import { AppError } from '../../lib/errors'
-import { candidateDuplicates, getCandidate, inviteCandidate, listCandidates, mergeCandidates, updateCandidateForeign, updateCandidateTags } from './talent.service'
+import { candidateDuplicates, getCandidate, inviteCandidate, listCandidates, listForeignCandidates, mergeCandidates, updateCandidateForeign, updateCandidateTags } from './talent.service'
 
 const idParams = z.object({ id: uuid })
 
@@ -20,6 +20,12 @@ export const talentRoutes =
     app.get('/candidates', { ...read, schema: { querystring: candidateFilters } }, async request => {
       const ctx = ctxOf(request)
       return tenantTx(db, ctx, tx => listCandidates(tx, request.query))
+    })
+
+    // Antes de /candidates/:id: rota fixa da aba Estrangeiros.
+    app.get('/candidates/foreign', read, async request => {
+      const ctx = ctxOf(request)
+      return tenantTx(db, ctx, tx => listForeignCandidates(tx))
     })
 
     app.get('/candidates/:id', { ...read, schema: { params: idParams } }, async request => {

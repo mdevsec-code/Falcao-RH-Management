@@ -20,7 +20,7 @@ import { Drawer } from '../components/ui/drawer'
 import { Field, Input, Select, Textarea } from '../components/ui/field'
 import { FileInput } from '../components/ui/file-input'
 import { Ring } from '../components/motion'
-import { Badge, Skeleton } from '../components/ui/layout'
+import { Badge, SkeletonKpis, SkeletonPanel, SkeletonText } from '../components/ui/layout'
 import { api, apiUpload, ApiError } from '../lib/api'
 import { cn } from '../lib/cn'
 import { formatDate, todayIso } from '../lib/format'
@@ -129,7 +129,7 @@ export function RequestDrawer({ id, onClose }: { id: string | null; onClose: () 
         ) : undefined
       }
     >
-      {query.isPending && <Skeleton className="h-60" />}
+      {query.isPending && <SkeletonPanel rows={4} />}
       {r && (
         <div className="flex flex-col gap-6">
           <div className="flex flex-wrap items-center gap-3">
@@ -436,7 +436,7 @@ export function NewRequestDrawer({
 // ---------- saldo de férias ----------
 
 export function VacationBalanceCard({ balance }: { balance: VacationBalance | undefined }) {
-  if (!balance) return <Skeleton className="h-40" />
+  if (!balance) return <SkeletonKpis count={3} className="grid gap-4 sm:grid-cols-3" />
   const periods = balance.periods.filter(p => p.complete && (p.remaining > 0 || p.pending > 0)).reverse()
   const current = balance.periods.find(p => !p.complete)
   const entitled = periods.reduce((sum, p) => sum + p.entitled, 0)
@@ -587,7 +587,7 @@ export function TimelineCalendar({ onOpen }: { onOpen: (id: string) => void }) {
             ))}
           </div>
           {query.isPending ? (
-            <Skeleton className="m-4 h-32" />
+            <SkeletonText lines={4} className="p-5" />
           ) : rows.length === 0 ? (
             <p className="px-5 py-12 text-center text-sm text-steel">Ninguém de férias ou ausente neste mês.</p>
           ) : (

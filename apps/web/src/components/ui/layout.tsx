@@ -1,5 +1,5 @@
 import { CircleAlert, RotateCw, type LucideIcon } from 'lucide-react'
-import { useRef, type ReactNode } from 'react'
+import { useRef, type CSSProperties, type ReactNode } from 'react'
 
 import { SplitTitle } from '../motion'
 
@@ -183,6 +183,139 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('shimmer rounded-md', className)} aria-hidden />
+}
+
+// ---------- esqueletos com a forma do conteúdo ----------
+// Cada um imita o que vai aparecer (cartão de indicador, painel, lista,
+// formulário), para a tela não "pular" quando os dados chegam.
+
+/** Larguras fixas e variadas: parecem texto de verdade e não mudam a cada render. */
+const LINE_WIDTHS = ['w-11/12', 'w-4/5', 'w-2/3', 'w-5/6', 'w-3/5', 'w-3/4']
+
+/** Container que anuncia o carregamento e faz os blocos entrarem em cascata. */
+export function SkeletonGroup({ className, label = 'Carregando', children }: { className?: string; label?: string; children: ReactNode }) {
+  return (
+    <div role="status" aria-busy="true" aria-label={label} className={className}>
+      {children}
+    </div>
+  )
+}
+
+const step = (i: number) => ({ '--i': i }) as CSSProperties
+
+/** Linhas de texto. */
+export function SkeletonText({ lines = 3, className }: { lines?: number; className?: string }) {
+  return (
+    <div className={cn('flex flex-col gap-2.5', className)} aria-hidden>
+      {Array.from({ length: lines }, (_, i) => (
+        <Skeleton key={i} className={cn('h-3 rounded-full', i === lines - 1 ? 'w-2/5' : LINE_WIDTHS[i % LINE_WIDTHS.length])} />
+      ))}
+    </div>
+  )
+}
+
+/** Cartão de indicador: rótulo, ícone, número grande e nota. */
+export function SkeletonKpi({ index = 0 }: { index?: number }) {
+  return (
+    <div className="surface skeleton-in flex flex-col justify-between gap-6 p-5" style={step(index)} aria-hidden>
+      <div className="flex items-start justify-between gap-3">
+        <Skeleton className="h-3 w-24 rounded-full" />
+        <Skeleton className="size-9 rounded-sm" />
+      </div>
+      <div className="flex flex-col gap-2.5">
+        <Skeleton className="h-9 w-28" />
+        <Skeleton className="h-2.5 w-40 rounded-full" />
+      </div>
+    </div>
+  )
+}
+
+/** Faixa de indicadores. */
+export function SkeletonKpis({ count = 4, className = 'grid gap-4 sm:grid-cols-2 xl:grid-cols-4' }: { count?: number; className?: string }) {
+  return (
+    <div className={className} aria-hidden>
+      {Array.from({ length: count }, (_, i) => (
+        <SkeletonKpi key={i} index={i} />
+      ))}
+    </div>
+  )
+}
+
+const BAR_HEIGHTS = ['h-[38%]', 'h-[62%]', 'h-[48%]', 'h-[80%]', 'h-[55%]', 'h-[92%]', 'h-[70%]', 'h-[44%]', 'h-[66%]', 'h-[86%]']
+
+/** Painel: cabeçalho e, por dentro, gráfico de barras ou linhas de lista. */
+export function SkeletonPanel({ rows = 5, chart = false, index = 0, className }: { rows?: number; chart?: boolean; index?: number; className?: string }) {
+  return (
+    <div className={cn('surface skeleton-in overflow-hidden', className)} style={step(index)} aria-hidden>
+      <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+        <Skeleton className="h-3.5 w-36 rounded-full" />
+        <Skeleton className="h-2.5 w-24 rounded-full" />
+      </div>
+      {chart ? (
+        <div className="flex h-56 items-end gap-2.5 px-5 pt-6 pb-5">
+          {BAR_HEIGHTS.map((h, i) => (
+            <Skeleton key={i} className={cn('flex-1 rounded-b-none', h)} />
+          ))}
+        </div>
+      ) : (
+        <ul className="divide-y divide-line">
+          {Array.from({ length: rows }, (_, i) => (
+            <li key={i} className="flex items-center gap-3 px-5 py-3.5">
+              <Skeleton className="h-3 flex-1 rounded-full" />
+              <Skeleton className={cn('h-3 rounded-full', i % 2 ? 'w-16' : 'w-24')} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** Lista de pessoas/itens: avatar, duas linhas e um selo. */
+export function SkeletonList({ rows = 5, className }: { rows?: number; className?: string }) {
+  return (
+    <ul className={cn('flex flex-col gap-3', className)} aria-hidden>
+      {Array.from({ length: rows }, (_, i) => (
+        <li key={i} className="surface skeleton-in flex items-center gap-4 p-4" style={step(i)}>
+          <Skeleton className="size-10 shrink-0 rounded-sm" />
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <Skeleton className={cn('h-3 rounded-full', i % 2 ? 'w-40' : 'w-52')} />
+            <Skeleton className="h-2.5 w-28 rounded-full" />
+          </div>
+          <Skeleton className="hidden h-2 w-40 rounded-full sm:block" />
+          <Skeleton className="h-6 w-20 rounded-full" />
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Formulário ou ficha: pares de rótulo e campo. */
+export function SkeletonForm({ fields = 6, className }: { fields?: number; className?: string }) {
+  return (
+    <div className={cn('grid gap-5 sm:grid-cols-2', className)} aria-hidden>
+      {Array.from({ length: fields }, (_, i) => (
+        <div key={i} className="skeleton-in flex flex-col gap-2" style={step(i)}>
+          <Skeleton className="h-2.5 w-24 rounded-full" />
+          <Skeleton className="h-10" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Destaque escuro (bloco principal das telas): o esqueleto segue o tom escuro. */
+export function SkeletonHero({ className }: { className?: string }) {
+  return (
+    <div className={cn('night-glow skeleton-in flex min-h-[280px] flex-col justify-between rounded-xl border border-night-line p-7', className)} aria-hidden>
+      <div className="flex flex-col gap-4">
+        <div className="h-2.5 w-32 rounded-full bg-white/10" />
+        <div className="h-20 w-48 rounded-md bg-white/10" />
+        <div className="h-3 w-64 rounded-full bg-white/10" />
+      </div>
+      <div className="h-2.5 w-full rounded-full bg-white/10" />
+    </div>
+  )
 }
 
 /** Par rótulo/valor das fichas. */
