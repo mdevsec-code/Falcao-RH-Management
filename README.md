@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/01-login.png" alt="Tela de entrada do Falcão RH: falcão amarelo e preto sobre grade técnica e o título Gente, obra e escritório no mesmo cadastro." width="100%">
+  <img src="docs/screenshots/01-login.png" alt="Tela de entrada do Falcão RH: saudação pelo horário, formulário de acesso e, ao lado, os avisos do portal chegando ao vivo." width="100%">
 </p>
 
 <h1 align="center">Falcão RH</h1>
@@ -39,6 +39,18 @@
 > Todas as capturas usam a organização de demonstração, com pessoas, documentos e pedidos **fictícios**.
 
 <table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/13-recrutamento.png" alt="Recrutamento com as vagas e o andamento de cada uma pelas etapas da Falcão"><br><sub><b>Recrutamento.</b> Vagas, candidaturas e as nove etapas da Falcão, da recepção do currículo à contratação.</sub></td>
+    <td width="50%"><img src="docs/screenshots/14-painel-rs.png" alt="Painel de R&amp;S com funil por etapa, recusas por etapa e conversão"><br><sub><b>Painel de R&amp;S.</b> Funil, onde os candidatos são recusados, conversão e dias até contratar.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/15-estrangeiros.png" alt="Aba Estrangeiros com as etapas migratórias de cada candidato"><br><sub><b>Estrangeiros.</b> Documentos, autorização, visto e RNM acompanhados etapa por etapa.</sub></td>
+    <td><img src="docs/screenshots/16-mobilidade.png" alt="Mobilidade com cobertura de transporte, custo anual e pendências de cadastro"><br><sub><b>Mobilidade.</b> Cobertura de transporte, fretado, custo e qualidade dos dados.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/17-beneficios.png" alt="Benefícios com a apuração mensal de VA e VR"><br><sub><b>Benefícios.</b> VA/VR com histórico de valores e apuração mensal com fechamento.</sub></td>
+    <td><img src="docs/screenshots/03-colaboradores.png" alt="Lista de colaboradores com filtros por departamento e situação"><br><sub><b>Colaboradores.</b> Cadastro, fichas, histórico e importação por planilha.</sub></td>
+  </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/02-painel.png" alt="Painel com quadro de pessoal, rotatividade, absenteísmo, evolução mensal e pendências"><br><sub><b>Painel.</b> Quadro, rotatividade e absenteísmo calculados no banco; pendências com link direto.</sub></td>
     <td width="50%"><img src="docs/screenshots/04-solicitacoes-calendario.png" alt="Calendário em linha do tempo com férias e ausências do mês"><br><sub><b>Solicitações.</b> Fila de aprovação e calendário do mês em linha do tempo.</sub></td>
