@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Gente, obra e escritório no mesmo cadastro.</strong><br>
-  Plataforma de gestão de pessoas da Falcão Construções e Engenharia: colaboradores, estrutura, férias pela CLT, aprovações, documentos com validade e indicadores, com isolamento por empresa e segurança de dados pessoais desde a primeira linha.
+  Plataforma de gestão de pessoas da Falcão Construções e Engenharia: do currículo à apuração dos benefícios. Recrutamento com página de vagas, contratação de estrangeiros, colaboradores, férias pela CLT, aprovações, documentos com validade, mobilidade, VA/VR e indicadores, em português, inglês e chinês, com isolamento por empresa e segurança de dados pessoais desde a primeira linha.
 </p>
 
 <p align="center">
@@ -14,7 +14,8 @@
   <img alt="Node 24" src="https://img.shields.io/badge/node-24-339933?style=flat-square&logo=nodedotjs&logoColor=white">
   <img alt="TypeScript estrito" src="https://img.shields.io/badge/TypeScript-estrito-3178C6?style=flat-square&logo=typescript&logoColor=white">
   <img alt="PostgreSQL 17 com RLS" src="https://img.shields.io/badge/PostgreSQL_17-RLS-4169E1?style=flat-square&logo=postgresql&logoColor=white">
-  <img alt="Testes" src="https://img.shields.io/badge/testes-102_unidade_e_integração_+_15_E2E-1F7A4D?style=flat-square">
+  <img alt="Testes" src="https://img.shields.io/badge/testes-unidade,_integração_e_E2E-1F7A4D?style=flat-square">
+  <img alt="Idiomas" src="https://img.shields.io/badge/idiomas-PT_·_EN_·_中文-FEBE02?style=flat-square">
 </p>
 
 ---
@@ -79,6 +80,14 @@
 | **Painel** | Quadro de pessoal, admissões, desligamentos, rotatividade, absenteísmo, evolução mensal, distribuição por departamento, unidade e centro de custo, próximas férias, aniversariantes e pendências |
 | **Acesso** | Convite por e-mail (sem senha provisória), MFA por aplicativo com QR code e códigos de recuperação, MFA obrigatório por perfil, aparelhos conectados com encerramento remoto, limite de tentativas |
 | **Perfis** | Administrador, RH, Gestor (só a equipe, sem dados pessoais sensíveis) e Colaborador (só a si mesmo) |
+| **Recrutamento** | Vagas com rascunho, publicação, pausa e encerramento; quadro de candidatos por etapas personalizáveis (arrastar e soltar); avaliação, notas, recusa com e-mail; contratação que cria o cadastro do colaborador e leva o currículo; painel de R&S com funil, recusas por etapa e dias até contratar |
+| **Página de vagas** | Página pública editável (capa, sobre, benefícios, perguntas frequentes, fotos), candidatura sem login com CPF, declaração de veracidade e consentimento LGPD, antivírus nos currículos |
+| **Banco de talentos** | Fichas de quem já se candidatou, etiquetas, junção de duplicatas e convite para novas vagas, respeitando o consentimento e o prazo de retenção |
+| **Estrangeiros** | Triagem migratória de cada contratado no exterior (foco em trabalhadores chineses): documentos apostilados, autorização de residência no MigranteWeb, visto VITEM V, RNM em 90 dias, admissão e conformidade, com alertas de prazo e multa |
+| **Admissão digital** | Link de uso único para o novo colaborador conferir os dados e enviar os documentos pelo celular, sem login; relação de documentos para admissão em PDF |
+| **Mobilidade** | Fretado com rotas e ocupação, mobilidade (cartão/app), cidades, custos, fornecedores e qualidade dos dados, com indicadores interativos |
+| **Benefícios** | VA/VR com planos e histórico de valores, benefício de cada pessoa e apuração mensal com ajuste, fechamento e planilha para a operadora |
+| **Idiomas** | Telas internas em português, inglês e chinês simplificado, com troca pelo botão da barra superior |
 
 ---
 
@@ -121,7 +130,16 @@ Cada escolha, com as alternativas avaliadas, está em [TECHNOLOGY_DECISIONS.md](
 
 ## Como rodar
 
-Requisitos: Node 22.12+ (recomendado 24) e PostgreSQL 15+ (recomendado 17).
+**Só para ver as telas (sem banco de dados):** o ambiente de teste sobe o site com dados fictícios em memória.
+
+```bash
+npm install
+npm run teste                 # abre http://localhost:5173 no navegador
+```
+
+No Windows, também dá para dar dois cliques em `Abrir ambiente de teste.bat`. Detalhes em [scripts/ambiente-de-teste](scripts/ambiente-de-teste/LEIA-ME.md).
+
+**Com a API e o banco de verdade.** Requisitos: Node 22.12+ (recomendado 24) e PostgreSQL 15+ (recomendado 17).
 
 ```bash
 npm install
@@ -149,9 +167,10 @@ Sem `SMTP_URL`, os e-mails (convites, avisos) aparecem no log da API. O seed rec
 
 ```bash
 npm run typecheck
-npm test                      # 102 testes: contratos, regras da CLT, interface, API e banco com RLS
+npm test                      # contratos, regras da CLT, interface, tradução, API e banco com RLS
 npm run build
-npm run test:e2e              # 15 testes no navegador; exige o ambiente DEMO rodando e E2E_PASSWORD
+npm run test:e2e              # testes no navegador; exige o ambiente DEMO rodando e E2E_PASSWORD
+node scripts/i18n-missing.cjs # textos das telas que ainda não têm tradução
 ```
 
 Os testes da API aplicam as mesmas migrações de produção num PostgreSQL em memória. Cobrem isolamento entre empresas, permissões de cada perfil, mascaramento de dados pessoais, fluxo de aprovação de ponta a ponta, privacidade de atestado, documentos (tipo falsificado, link adulterado ou vencido, outra empresa), importação com erros, automações sem aviso duplicado e MFA obrigatório. O CI roda tudo, inclusive o E2E contra um PostgreSQL 17 real.
@@ -164,7 +183,9 @@ Os testes da API aplicam as mesmas migrações de produção num PostgreSQL em m
 apps/api            API: módulos de domínio, autenticação, automações, migrações, seed
 apps/web            Interface: design system, telas, sistema de movimento
 packages/contracts  Esquemas Zod, perfis e permissões compartilhados
+apps/web/src/i18n   Dicionários de tradução (inglês e chinês)
 e2e                 Testes ponta a ponta e capturas de tela
+scripts             Ambiente de teste e verificação de traduções
 docs                Produto, arquitetura, banco, segurança, implantação, roadmap e ADRs
 ```
 
@@ -187,6 +208,6 @@ docs                Produto, arquitetura, banco, segurança, implantação, road
 
 ## Próximos passos
 
-Treinamentos e NRs com validade, controle de jornada e escalas (controle interno, não ponto legal: [ADR-0009](docs/adr/0009-jornada-nao-e-ponto-legal.md)), onboarding e offboarding, recrutamento, avaliação de desempenho, comunicação interna e relatórios em PDF. A lista completa, com as decisões que dependem da Falcão, está no [roadmap](docs/ROADMAP.md).
+Treinamentos e NRs com validade, controle de jornada e escalas (controle interno, não ponto legal: [ADR-0009](docs/adr/0009-jornada-nao-e-ponto-legal.md)), offboarding, avaliação de desempenho, worker de antivírus e retenção LGPD do recrutamento, implantação na AWS, comunicação interna e relatórios em PDF. A lista completa, com as decisões que dependem da Falcão, está no [roadmap](docs/ROADMAP.md).
 
 <p align="center"><sub>Falcão Construções e Engenharia. Dados de demonstração inteiramente fictícios.</sub></p>
