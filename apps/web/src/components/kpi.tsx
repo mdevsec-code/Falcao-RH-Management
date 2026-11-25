@@ -43,7 +43,8 @@ export function Hoverable({ details, className, children }: { details?: Details;
       {children}
       <div
         role="tooltip"
-        className="pointer-events-none invisible absolute inset-x-0 top-full z-40 mt-2 translate-y-1.5 opacity-0 transition-[opacity,transform,visibility] duration-200 ease-out group-focus-within/hv:visible group-focus-within/hv:translate-y-0 group-focus-within/hv:opacity-100 group-hover/hv:visible group-hover/hv:translate-y-0 group-hover/hv:opacity-100"
+        // Escondido com altura zero: um painel invisível abaixo dos últimos cartões esticava a página (faixa vazia no fim).
+        className="pointer-events-none invisible absolute inset-x-0 top-full z-40 mt-2 max-h-0 translate-y-1.5 overflow-hidden opacity-0 transition-[opacity,transform,visibility] duration-200 ease-out group-focus-within/hv:visible group-focus-within/hv:max-h-none group-focus-within/hv:translate-y-0 group-focus-within/hv:overflow-visible group-focus-within/hv:opacity-100 group-hover/hv:visible group-hover/hv:max-h-none group-hover/hv:translate-y-0 group-hover/hv:overflow-visible group-hover/hv:opacity-100"
       >
         <div className="min-w-56 rounded-lg border border-line bg-paper p-3.5 text-[12.5px] shadow-pop">
           <p className="mb-2 text-[11px] font-semibold tracking-[0.12em] text-steel uppercase">{details.title}</p>

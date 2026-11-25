@@ -2,7 +2,7 @@ import { ArrowUp } from 'lucide-react'
 import { useEffect, useRef, useState, type ElementType, type ReactNode, type RefObject } from 'react'
 
 import { cn } from '../lib/cn'
-import { Flip, gsap, MOTION, reducedMotion, ScrollTrigger, splitTitle, TITLE_HIDDEN_Y, useGSAP } from '../lib/gsap'
+import { gsap, MOTION, reducedMotion, ScrollTrigger, splitTitle, TITLE_HIDDEN_Y, useGSAP } from '../lib/gsap'
 import { useT } from '../lib/i18n'
 
 /** Número que conta até o valor; anima de novo quando o valor muda. */
@@ -221,7 +221,12 @@ export function RevealScope({ routeKey, className, children }: { routeKey: strin
 
       const mm = gsap.matchMedia()
       mm.add(MOTION.ok, (_context, contextSafe) => {
-        gsap.fromTo(root, { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.6, clearProps: 'transform,opacity,visibility' })
+        // Troca de página como um "foco": sobe, ganha nitidez e aparece.
+        gsap.fromTo(
+          root,
+          { autoAlpha: 0, y: 14, filter: 'blur(6px)' },
+          { autoAlpha: 1, y: 0, filter: 'blur(0px)', duration: 0.6, clearProps: 'transform,opacity,visibility,filter' },
+        )
 
         const seen = new WeakSet<Element>()
         let frame = 0
@@ -235,14 +240,19 @@ export function RevealScope({ routeKey, className, children }: { routeKey: strin
             start: 'top 96%',
             once: true,
             batchMax,
-            onEnter: targets => gsap.to(targets, { ...to, overwrite: true, clearProps: 'transform,opacity,visibility' }),
+            onEnter: targets => gsap.to(targets, { ...to, overwrite: true, clearProps: 'transform,opacity,visibility,filter' }),
           })
           return true
         }
 
         const scan = contextSafe!(() => {
           frame = 0
-          const blocks = batch('[data-reveal]', { autoAlpha: 0, y: 28 }, { autoAlpha: 1, y: 0, duration: 0.85, stagger: 0.075 }, 6)
+          const blocks = batch(
+            '[data-reveal]',
+            { autoAlpha: 0, y: 24, scale: 0.985, filter: 'blur(4px)' },
+            { autoAlpha: 1, y: 0, scale: 1, filter: 'blur(0px)', duration: 0.8, stagger: { each: 0.07, ease: 'power1.in' } },
+            6,
+          )
           const rows = batch('[data-reveal-row]', { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.55, stagger: 0.028 }, 30)
           // Conteúdo novo empurra o que está abaixo: posições recalculadas.
           if (blocks || rows) ScrollTrigger.refresh()
@@ -270,7 +280,7 @@ export function RevealScope({ routeKey, className, children }: { routeKey: strin
 }
 
 /**
- * Indicador que desliza até o item ativo (menu, abas). Flip.fit encaixa o
+ * Indicador que desliza até o item ativo (menu, abas): estica e recolhe sobre o
  * `[data-indicator]` sobre o item com `[data-active="true"]`; ao redimensionar,
  * reencaixa sem animar.
  */
@@ -281,16 +291,45 @@ export function useIndicator(container: RefObject<HTMLElement | null>, active: u
       const root = container.current
       const indicator = root?.querySelector<HTMLElement>('[data-indicator]')
       if (!root || !indicator) return
+      // Posição do item em relação ao contêiner (o indicador é absoluto dentro dele).
+      const box = (el: HTMLElement) => {
+        const r = el.getBoundingClientRect()
+        const b = root.getBoundingClientRect()
+        return { x: r.left - b.left + root.scrollLeft, y: r.top - b.top + root.scrollTop, width: r.width, height: r.height }
+      }
       const fit = (animate: boolean) => {
         const target = root.querySelector<HTMLElement>('[data-active="true"]')
         if (!target) return gsap.to(indicator, { autoAlpha: 0, duration: animate ? 0.2 : 0 })
-        gsap.set(indicator, { autoAlpha: 1 })
-        const duration = animate && !reducedMotion() ? 0.55 : 0
-        Flip.fit(indicator, target, { duration, ease: 'falcon', absolute: true })
+        const to = box(target)
+        const visible = Number(gsap.getProperty(indicator, 'opacity')) > 0.5
+        gsap.killTweensOf(indicator)
+        if (!animate || reducedMotion() || !visible) {
+          gsap.set(indicator, { ...to, autoAlpha: 1, top: 0, left: 0 })
+          return
+        }
+        // Movimento líquido: estica até o item novo e depois recolhe sobre ele.
+        const fromY = Number(gsap.getProperty(indicator, 'y'))
+        const fromH = Number(gsap.getProperty(indicator, 'height'))
+        const down = to.y > fromY
+        const reach = down ? to.y + to.height - fromY : fromY + fromH - to.y
+        const distance = Math.min(1, Math.abs(to.y - fromY) / 240)
+        gsap
+          .timeline({ defaults: { overwrite: 'auto' } })
+          .to(indicator, { x: to.x, width: to.width, duration: 0.35 }, 0)
+          .to(indicator, { height: reach, ...(down ? {} : { y: to.y }), duration: 0.1 + distance * 0.08, ease: 'power3.in' }, 0)
+          .to(indicator, { y: to.y, height: to.height, duration: 0.5, ease: 'expo.out' })
+        const icon = target.querySelector('svg')
+        if (icon) gsap.fromTo(icon, { scale: 0.7, rotate: -10 }, { scale: 1, rotate: 0, duration: 0.6, ease: 'back.out(3)', clearProps: 'transform' })
       }
       fit(!first.current)
       first.current = false
-      const resize = new ResizeObserver(() => fit(false))
+      // O observador dispara ao ser criado: ignorar essa primeira chamada, senão
+      // ela reposiciona sem animar e corta a transição que acabou de começar.
+      let armed = false
+      const resize = new ResizeObserver(() => {
+        if (armed) fit(false)
+        armed = true
+      })
       resize.observe(root)
       return () => resize.disconnect()
     },

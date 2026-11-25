@@ -24,6 +24,12 @@ CustomEase.create('falcon', '0.16, 1, 0.3, 1')
 /** Saída: acelera e some, para o que está indo embora. */
 CustomEase.create('falcon-in', '0.7, 0, 0.84, 0')
 gsap.defaults({ ease: 'falcon', duration: 0.8 })
+// Motor: transformações na GPU, sem saltos quando o navegador engasga (aba em
+// segundo plano, carga pesada) e sem recalcular a rolagem a cada barra de
+// endereço que some no celular.
+gsap.config({ force3D: true })
+gsap.ticker.lagSmoothing(500, 33)
+ScrollTrigger.config({ ignoreMobileResize: true })
 
 /** Condições de gsap.matchMedia(): o movimento só existe para quem não pediu menos. */
 export const MOTION = {
