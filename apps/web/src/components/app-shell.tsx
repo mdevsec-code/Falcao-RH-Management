@@ -27,15 +27,15 @@ const COLLAPSE_KEY = 'falcao-rh:sidebar'
 
 function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
-    // Faixa branca fixa (também no tema escuro) para destacar a logo; o resto do menu segue escuro.
-    // Placa branca solta sobre o fundo escuro: cantos suaves, sombra caindo no preto e um fio da marca embaixo.
+    // Faixa branca na largura toda (também no tema escuro) que se dissolve no preto
+    // em vez de cortar seco; um fio da marca marca a passagem.
     <Link
       to="/"
       className={cn(
-        'group relative mx-3 mt-3 mb-5 flex h-16 shrink-0 items-center gap-3 overflow-hidden rounded-2xl bg-gradient-to-b from-white to-[#f3f3f0]',
-        'shadow-[0_1px_0_rgb(255_255_255/0.9)_inset,0_14px_32px_-14px_rgb(0_0_0/0.85),0_0_0_1px_rgb(255_255_255/0.06)]',
-        'after:absolute after:inset-x-5 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-brand after:to-transparent',
-        collapsed ? 'justify-center px-0' : 'px-4',
+        'group relative z-10 mb-12 flex h-16 shrink-0 items-center gap-3 bg-white',
+        'before:pointer-events-none before:absolute before:inset-x-0 before:top-full before:h-14 before:bg-[linear-gradient(to_bottom,rgb(255_255_255)_0%,rgb(255_255_255/0.55)_18%,rgb(255_255_255/0.22)_42%,rgb(255_255_255/0.07)_70%,transparent_100%)]',
+        'after:pointer-events-none after:absolute after:inset-x-6 after:bottom-0 after:h-px after:bg-gradient-to-r after:from-transparent after:via-brand after:to-transparent',
+        collapsed ? 'justify-center px-0' : 'px-6',
       )}
       aria-label="Falcão RH, início"
     >
